@@ -276,6 +276,44 @@ button {
   color: white;
 }
 
+.custom-margin-field {
+  align-items: center;
+  display: flex;
+  flex-basis: 100%;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.custom-margin-field label {
+  color: #555;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.custom-margin-input {
+  align-items: center;
+  background: rgb(240,240,240);
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.custom-margin-input input {
+  background: transparent;
+  border: none;
+  flex: 1;
+  font-size: 15px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.custom-margin-input span {
+  color: #555;
+  font-size: 13px;
+  padding-right: 10px;
+}
+
 .image-quality-row {
   display: flex;
   justify-content: space-between;

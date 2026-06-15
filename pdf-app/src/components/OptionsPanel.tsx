@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 import {
   IMAGE_FIT_LABELS,
   IMAGE_FITS,
@@ -9,6 +10,7 @@ import {
   PAGE_SIZE_LABELS,
   PAGE_SIZES,
 } from '../constants/pdfOptions';
+import { mmToPdfPoints } from '../pdf/pageLayout';
 import type { PageOrientation, PdfOptions } from '../types/pdf';
 
 interface OptionsPanelProps {
@@ -37,6 +39,48 @@ export default function OptionsPanel({
   onChangeOrientation,
   onClose,
 }: OptionsPanelProps) {
+  const [marginInputFocused, setMarginInputFocused] = useState(false);
+  const [marginInputValue, setMarginInputValue] = useState(() => formatMarginInputValue(options.margin));
+
+  useEffect(() => {
+    if (!marginInputFocused) {
+      setMarginInputValue(formatMarginInputValue(options.margin));
+    }
+  }, [marginInputFocused, options.margin]);
+
+  const updateMargin = (margin: number) => {
+    onChangeOptions({ margin });
+    setMarginInputValue(formatMarginInputValue(margin));
+  };
+
+  const changeCustomMargin = (event: ChangeEvent<HTMLInputElement>) => {
+    const { value } = event.currentTarget;
+    setMarginInputValue(value);
+
+    if (value.trim() === '') {
+      return;
+    }
+
+    const marginMillimeters = Number(value);
+    if (!Number.isFinite(marginMillimeters)) {
+      return;
+    }
+
+    onChangeOptions({ margin: mmToPdfPoints(Math.max(0, marginMillimeters)) });
+  };
+
+  const commitCustomMargin = () => {
+    setMarginInputFocused(false);
+
+    const marginMillimeters = Number(marginInputValue);
+    if (marginInputValue.trim() === '' || !Number.isFinite(marginMillimeters)) {
+      updateMargin(PAGE_MARGINS.NONE);
+      return;
+    }
+
+    updateMargin(mmToPdfPoints(Math.max(0, marginMillimeters)));
+  };
+
   return (
     <div className={`options${forceShowOptions ? ' options--visible' : ''}`}>
       <div className="options-header">
@@ -93,29 +137,46 @@ export default function OptionsPanel({
       {options.pageSize !== PAGE_SIZES.IMAGE ? (
         <OptionSection title="Page margin">
           <OptionButton
-            active={options.margin === PAGE_MARGINS.NONE}
-            onClick={() => onChangeOptions({ margin: PAGE_MARGINS.NONE })}
+            active={isSameMargin(options.margin, PAGE_MARGINS.NONE)}
+            onClick={() => updateMargin(PAGE_MARGINS.NONE)}
           >
             {PAGE_MARGIN_LABELS[PAGE_MARGINS.NONE]}
           </OptionButton>
           <OptionButton
-            active={options.margin === PAGE_MARGINS.MM_5}
-            onClick={() => onChangeOptions({ margin: PAGE_MARGINS.MM_5 })}
+            active={isSameMargin(options.margin, PAGE_MARGINS.MM_5)}
+            onClick={() => updateMargin(PAGE_MARGINS.MM_5)}
           >
             {PAGE_MARGIN_LABELS[PAGE_MARGINS.MM_5]}
           </OptionButton>
           <OptionButton
-            active={options.margin === PAGE_MARGINS.MM_10}
-            onClick={() => onChangeOptions({ margin: PAGE_MARGINS.MM_10 })}
+            active={isSameMargin(options.margin, PAGE_MARGINS.MM_10)}
+            onClick={() => updateMargin(PAGE_MARGINS.MM_10)}
           >
             {PAGE_MARGIN_LABELS[PAGE_MARGINS.MM_10]}
           </OptionButton>
           <OptionButton
-            active={options.margin === PAGE_MARGINS.MM_20}
-            onClick={() => onChangeOptions({ margin: PAGE_MARGINS.MM_20 })}
+            active={isSameMargin(options.margin, PAGE_MARGINS.MM_20)}
+            onClick={() => updateMargin(PAGE_MARGINS.MM_20)}
           >
             {PAGE_MARGIN_LABELS[PAGE_MARGINS.MM_20]}
           </OptionButton>
+          <div className="custom-margin-field">
+            <label htmlFor="custom-margin">Custom margin</label>
+            <div className="custom-margin-input">
+              <input
+                id="custom-margin"
+                inputMode="decimal"
+                min="0"
+                onBlur={commitCustomMargin}
+                onChange={changeCustomMargin}
+                onFocus={() => setMarginInputFocused(true)}
+                step="0.1"
+                type="number"
+                value={marginInputValue}
+              />
+              <span>mm</span>
+            </div>
+          </div>
         </OptionSection>
       ) : null}
 
@@ -200,4 +261,19 @@ function OptionButton({ active, children, onClick }: OptionButtonProps) {
       {children}
     </button>
   );
+}
+
+function formatMarginInputValue(margin: number): string {
+  const millimeters = Math.max(0, Number(margin) || 0) * 25.4 / 72;
+  const roundedMillimeters = Math.round(millimeters * 100) / 100;
+
+  if (Number.isInteger(roundedMillimeters)) {
+    return String(roundedMillimeters);
+  }
+
+  return String(roundedMillimeters);
+}
+
+function isSameMargin(currentMargin: number, targetMargin: number): boolean {
+  return Math.abs(currentMargin - targetMargin) < 0.01;
 }

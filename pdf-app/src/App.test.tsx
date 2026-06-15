@@ -5,6 +5,7 @@ import App from './App';
 import { IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from './constants/pdfOptions';
 import { downloadPdf } from './download/downloadPdf';
 import { createPdfFromImages } from './pdf/createPdfFromImages';
+import { mmToPdfPoints } from './pdf/pageLayout';
 
 vi.mock('./pdf/createPdfFromImages', () => ({
   createPdfFromImages: vi.fn(),
@@ -54,6 +55,7 @@ test('starts with the expected default PDF options', async () => {
   expect(screen.getByRole('button', { name: 'A4' })).toHaveAttribute('aria-pressed', 'true');
   expect(getOptionButton('Portrait')).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: '0 mm' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('spinbutton', { name: /custom margin/i })).toHaveValue(0);
   expect(screen.getByRole('button', { name: 'Fit' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: "Don't Compress" })).toHaveAttribute('aria-pressed', 'true');
 });
@@ -247,6 +249,39 @@ test('passes updated options to PDF generation and downloads the result', async 
       expect.any(Function),
     );
     expect(downloadPdf).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]), 'scan bundle.pdf');
+  });
+});
+
+test('custom page margin accepts decimal millimeter values', async () => {
+  const user = userEvent.setup();
+  const file = new File(['image'], 'photo.jpg', { type: 'image/jpeg' });
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), file);
+  const marginInput = screen.getByRole('spinbutton', { name: /custom margin/i });
+
+  await user.click(screen.getByRole('button', { name: '20 mm' }));
+  expect(marginInput).toHaveValue(20);
+
+  fireEvent.change(marginInput, { target: { value: '12.5' } });
+  expect(marginInput).toHaveValue(12.5);
+  expect(screen.getByRole('button', { name: '20 mm' })).toHaveAttribute('aria-pressed', 'false');
+
+  await user.click(screen.getByRole('button', { name: /generate pdf/i }));
+
+  await waitFor(() => {
+    const pdfCall = vi.mocked(createPdfFromImages).mock.calls[0];
+    if (!pdfCall) {
+      throw new Error('Expected PDF generation to be called.');
+    }
+
+    const [, options] = pdfCall;
+    if (!options) {
+      throw new Error('Expected PDF options to be passed.');
+    }
+
+    expect(options.margin).toBeCloseTo(mmToPdfPoints(12.5), 5);
   });
 });
 
