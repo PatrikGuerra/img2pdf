@@ -42,12 +42,6 @@ Useful commands:
 - `npm run build`: build the static site into `docs`.
 - `npm run preview`: preview the production build locally.
 
-## Deployment
-
-The production static site is generated into the repository-level `docs` directory.
-
-This repo includes a GitHub Actions workflow at `.github/workflows/deploy-pages.yml` that runs tests, builds the app, uploads `docs` as a GitHub Pages artifact, and deploys it. In GitHub repository settings, configure Pages to use `GitHub Actions` as the publishing source.
-
 ## Credits
 
 This project is based on and inspired by the original `subhra74/img2pdf` project: https://github.com/subhra74/img2pdf

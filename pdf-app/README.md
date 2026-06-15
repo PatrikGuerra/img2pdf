@@ -47,9 +47,9 @@ Live app: https://patrikguerra.github.io/img2pdf/
 
 ## Deployment
 
-GitHub Pages is served from the repository-level `docs` directory. Run `npm run build` from this directory to regenerate that output locally.
+The production static site is generated into the repository-level `docs` directory during build. The `docs` directory is ignored and not versioned; it is only local/CI build output.
 
-The repository also includes a GitHub Actions workflow at `.github/workflows/deploy-pages.yml`. It runs on pushes to `main` or manually through `workflow_dispatch`, installs dependencies, runs tests, builds the Vite app into `docs`, and deploys that directory to GitHub Pages. In the repository settings, configure Pages to use `GitHub Actions` as the publishing source.
+The repository includes a GitHub Actions workflow at `.github/workflows/deploy-pages.yml`. It runs on pushes to `main` or manually through `workflow_dispatch`, installs dependencies, runs tests, builds the Vite app into `docs`, uploads that generated directory as a Pages artifact, and deploys it to GitHub Pages. In the repository settings, configure Pages to use `GitHub Actions` as the publishing source.
 
 ## Image formats
 
