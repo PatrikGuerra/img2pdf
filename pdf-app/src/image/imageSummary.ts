@@ -8,7 +8,7 @@ export interface ImageSummary {
 
 export function getImageSummary(images: ImageItem[]): ImageSummary {
   const count = images.length;
-  const totalBytes = images.reduce((sum, image) => sum + image.file.size, 0);
+  const totalBytes = images.reduce((sum, image) => sum + (image.sourceFile?.size ?? image.file.size), 0);
   const imageLabel = count === 1 ? 'image' : 'images';
 
   return {

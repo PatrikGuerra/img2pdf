@@ -2,10 +2,12 @@ import { expect, test, vi } from 'vitest';
 import {
   clearImageSelection,
   createImageItems,
+  createImageItemsReport,
   deleteImageById,
   flipImageById,
   getOrientationFromDimensions,
   hasMixedImageOrientations,
+  isHeicImageFile,
   isSupportedImageFile,
   moveImageByOffset,
   moveImageBefore,
@@ -18,10 +20,15 @@ import {
 import { PAGE_ORIENTATIONS } from '../constants/pdfOptions';
 import type { ImageItem, PageOrientation } from '../types/pdf';
 
-test('accepts only PNG and JPEG files', () => {
+test('accepts PNG, JPEG, HEIC and HEIF files', () => {
   expect(isSupportedImageFile(new File(['png'], 'image.png', { type: 'image/png' }))).toBe(true);
   expect(isSupportedImageFile(new File(['png'], 'image.png', { type: 'image/x-png' }))).toBe(true);
   expect(isSupportedImageFile(new File(['jpg'], 'image.jpg', { type: 'image/jpeg' }))).toBe(true);
+  expect(isSupportedImageFile(new File(['heic'], 'image.heic', { type: 'image/heic' }))).toBe(true);
+  expect(isSupportedImageFile(new File(['heif'], 'image.heif', { type: 'image/heif' }))).toBe(true);
+  expect(isSupportedImageFile(new File(['heic'], 'image.heic', { type: '' }))).toBe(true);
+  expect(isSupportedImageFile(new File(['heif'], 'image.heif', { type: 'application/octet-stream' }))).toBe(true);
+  expect(isHeicImageFile(new File(['heic'], 'image.heic', { type: '' }))).toBe(true);
   expect(isSupportedImageFile(new File(['txt'], 'notes.txt', { type: 'text/plain' }))).toBe(false);
 });
 
@@ -52,6 +59,166 @@ test('creates image items only for supported files and detects orientation', asy
   ]);
   expect(createObjectUrl).toHaveBeenCalledTimes(1);
   expect(loadDimensions).toHaveBeenCalledWith('blob:image.png');
+});
+
+test('converts HEIC and HEIF files before creating preview URLs', async () => {
+  const createObjectUrl = vi.fn((file: File) => `blob:${file.name}`);
+  const loadDimensions = vi.fn(async () => ({ width: 100, height: 300 }));
+  const converted = new File(['jpeg'], 'photo.jpg', { type: 'image/jpeg' });
+  const convertHeic = vi.fn(async () => converted);
+  const readOrientation = vi.fn(async () => 1 as const);
+  const source = new File(['heic'], 'photo.heic', { type: 'image/heic' });
+
+  const report = await createImageItemsReport(
+    [source],
+    createObjectUrl,
+    PAGE_ORIENTATIONS.LANDSCAPE,
+    loadDimensions,
+    convertHeic,
+    readOrientation,
+  );
+
+  expect(report.convertedCount).toBe(1);
+  expect(report.ignoredCount).toBe(0);
+  expect(report.imageItems).toEqual([
+    expect.objectContaining({
+      convertedFrom: 'HEIC',
+      file: converted,
+      naturalDimensions: { width: 100, height: 300 },
+      pageOrientation: PAGE_ORIENTATIONS.PORTRAIT,
+      previewUrl: 'blob:photo.jpg',
+      sourceFile: source,
+    }),
+  ]);
+  expect(convertHeic).toHaveBeenCalledWith(source, 0.95);
+  expect(createObjectUrl).toHaveBeenCalledWith(converted);
+});
+
+test('reports file preparation progress while converting HEIC files', async () => {
+  const createObjectUrl = vi.fn((file: File) => `blob:${file.name}`);
+  const loadDimensions = vi.fn(async () => ({ width: 100, height: 300 }));
+  const converted = new File(['jpeg'], 'photo.jpg', { type: 'image/jpeg' });
+  const convertHeic = vi.fn(async () => converted);
+  const readOrientation = vi.fn(async () => 1 as const);
+  const onProgress = vi.fn();
+  const source = new File(['heic'], 'photo.heic', { type: 'image/heic' });
+
+  await createImageItemsReport(
+    [source],
+    createObjectUrl,
+    PAGE_ORIENTATIONS.PORTRAIT,
+    loadDimensions,
+    convertHeic,
+    readOrientation,
+    onProgress,
+  );
+
+  expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
+    index: 0,
+    message: 'Preparing files...',
+    sourceType: 'HEIC',
+    status: 'queued',
+  }));
+  expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
+    message: 'Converting HEIC/HEIF to JPEG locally...',
+    status: 'converting',
+  }));
+  expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
+    message: 'Converted to JPEG locally.',
+    previewUrl: 'blob:photo.jpg',
+    status: 'ready',
+  }));
+});
+
+test('ignores HEIC files when local conversion fails', async () => {
+  const createObjectUrl = vi.fn();
+  const loadDimensions = vi.fn(async () => ({ width: 100, height: 300 }));
+  const convertHeic = vi.fn(async () => {
+    throw new Error('conversion failed');
+  });
+  const source = new File(['heic'], 'photo.heic', { type: 'image/heic' });
+
+  const report = await createImageItemsReport(
+    [source],
+    createObjectUrl,
+    PAGE_ORIENTATIONS.PORTRAIT,
+    loadDimensions,
+    convertHeic,
+  );
+
+  expect(report.convertedCount).toBe(0);
+  expect(report.ignoredCount).toBe(1);
+  expect(report.imageItems).toEqual([]);
+  expect(createObjectUrl).not.toHaveBeenCalled();
+});
+
+test('reports ignored file progress without creating object URLs', async () => {
+  const createObjectUrl = vi.fn();
+  const onProgress = vi.fn();
+  const text = new File(['txt'], 'notes.txt', { type: 'text/plain' });
+
+  const report = await createImageItemsReport(
+    [text],
+    createObjectUrl,
+    PAGE_ORIENTATIONS.PORTRAIT,
+    undefined,
+    undefined,
+    undefined,
+    onProgress,
+  );
+
+  expect(report.imageItems).toEqual([]);
+  expect(report.ignoredCount).toBe(1);
+  expect(createObjectUrl).not.toHaveBeenCalled();
+  expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
+    message: 'Ignored: not PNG/JPEG/HEIC/HEIF.',
+    sourceType: 'UNKNOWN',
+    status: 'ignored',
+  }));
+});
+
+test('uses JPEG EXIF orientation to detect the effective image orientation', async () => {
+  const createObjectUrl = vi.fn((file: File) => `blob:${file.name}`);
+  const loadDimensions = vi.fn(async () => ({ width: 100, height: 300 }));
+  const readOrientation = vi.fn(async () => 6 as const);
+  const image = new File(['jpg'], 'photo.jpg', { type: 'image/jpeg' });
+
+  const report = await createImageItemsReport(
+    [image],
+    createObjectUrl,
+    PAGE_ORIENTATIONS.PORTRAIT,
+    loadDimensions,
+    undefined,
+    readOrientation,
+  );
+
+  expect(report.imageItems[0]).toEqual(expect.objectContaining({
+    naturalDimensions: { width: 300, height: 100 },
+    pageOrientation: PAGE_ORIENTATIONS.LANDSCAPE,
+  }));
+});
+
+test('keeps dimension-based orientation when EXIF orientation reading fails', async () => {
+  const createObjectUrl = vi.fn((file: File) => `blob:${file.name}`);
+  const loadDimensions = vi.fn(async () => ({ width: 300, height: 100 }));
+  const readOrientation = vi.fn(async () => {
+    throw new Error('bad exif');
+  });
+  const image = new File(['jpg'], 'photo.jpg', { type: 'image/jpeg' });
+
+  const report = await createImageItemsReport(
+    [image],
+    createObjectUrl,
+    PAGE_ORIENTATIONS.PORTRAIT,
+    loadDimensions,
+    undefined,
+    readOrientation,
+  );
+
+  expect(report.imageItems[0]).toEqual(expect.objectContaining({
+    naturalDimensions: { width: 300, height: 100 },
+    pageOrientation: PAGE_ORIENTATIONS.LANDSCAPE,
+  }));
 });
 
 test('handles empty file lists and files without mime type', async () => {

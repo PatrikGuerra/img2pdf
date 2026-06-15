@@ -23,6 +23,21 @@ test('summarizes image count and total original file size', () => {
   });
 });
 
+test('uses source file size for locally converted images', () => {
+  const sourceFile = new File([new Uint8Array(4096)], 'photo.heic', { type: 'image/heic' });
+  const image = {
+    ...makeImageItem('photo.jpg', 512),
+    convertedFrom: 'HEIC' as const,
+    sourceFile,
+  };
+
+  expect(getImageSummary([image])).toEqual({
+    count: 1,
+    totalBytes: 4096,
+    label: expect.stringMatching(/1 image .* estimated 4\.0 KB/),
+  });
+});
+
 function makeImageItem(name: string, size: number): ImageItem {
   return {
     id: name,

@@ -1,13 +1,62 @@
 import { PAGE_ORIENTATIONS } from '../constants/pdfOptions';
-import type { FlipAxis, ImageDimensions, ImageItem, PageOrientation, RotationDegrees } from '../types/pdf';
+import { getOrientedDimensions, readJpegExifOrientation } from './exifOrientation';
+import type { FlipAxis, ImageDimensions, ImageItem, JpegOrientation, PageOrientation, RotationDegrees } from '../types/pdf';
+import type { ImagePreparationProgress, UploadSourceType } from '../types/upload';
 
-const SUPPORTED_IMAGE_TYPES = new Set(['image/png', 'image/x-png', 'image/jpeg']);
+const SUPPORTED_RASTER_IMAGE_TYPES = new Set(['image/png', 'image/x-png', 'image/jpeg']);
+const HEIC_IMAGE_TYPES = new Set(['image/heic', 'image/heif']);
+const HEIC_EXTENSIONS = new Set(['heic', 'heif']);
+const HEIC_CONVERSION_QUALITY = 0.95;
 type CreateObjectUrl = (file: File) => string;
 type LoadImageDimensions = (src: string) => Promise<ImageDimensions>;
+type ConvertHeicToJpeg = (file: File, quality?: number) => Promise<File>;
+type ReadJpegOrientation = (file: File) => Promise<JpegOrientation>;
 type RevokeObjectUrl = (url: string) => void;
+type OnImagePreparationProgress = (progress: ImagePreparationProgress) => void;
+
+export interface CreateImageItemsReport {
+  convertedCount: number;
+  ignoredCount: number;
+  imageItems: ImageItem[];
+}
 
 export function isSupportedImageFile(file: File | undefined | null): file is File {
-  return Boolean(file && SUPPORTED_IMAGE_TYPES.has(file.type));
+  return Boolean(file && (SUPPORTED_RASTER_IMAGE_TYPES.has(file.type) || isHeicImageFile(file)));
+}
+
+export function isHeicImageFile(file: File | undefined | null): file is File {
+  if (!file) {
+    return false;
+  }
+
+  if (HEIC_IMAGE_TYPES.has(file.type.toLowerCase())) {
+    return true;
+  }
+
+  const extension = getFileExtension(file.name);
+  return Boolean(extension && HEIC_EXTENSIONS.has(extension));
+}
+
+export function getImageSourceType(file: File | undefined | null): UploadSourceType {
+  if (!file) {
+    return 'UNKNOWN';
+  }
+
+  const heicKind = getHeicImageKind(file);
+  if (heicKind) {
+    return heicKind;
+  }
+
+  const type = file.type.toLowerCase();
+  if (type === 'image/png' || type === 'image/x-png') {
+    return 'PNG';
+  }
+
+  if (type === 'image/jpeg') {
+    return 'JPEG';
+  }
+
+  return 'UNKNOWN';
 }
 
 export async function createImageItems(
@@ -16,31 +65,118 @@ export async function createImageItems(
   fallbackOrientation: PageOrientation = PAGE_ORIENTATIONS.PORTRAIT,
   loadDimensions: LoadImageDimensions = loadImageDimensions,
 ): Promise<ImageItem[]> {
-  const items = Array.from(fileList ?? [])
-    .filter(isSupportedImageFile)
-    .map((file) => ({
-      id: createImageId(),
+  const report = await createImageItemsReport(fileList, createObjectUrl, fallbackOrientation, loadDimensions);
+  return report.imageItems;
+}
+
+export async function createImageItemsReport(
+  fileList: FileList | File[] | null | undefined,
+  createObjectUrl: CreateObjectUrl = getCreateObjectUrl(),
+  fallbackOrientation: PageOrientation = PAGE_ORIENTATIONS.PORTRAIT,
+  loadDimensions: LoadImageDimensions = loadImageDimensions,
+  convertHeic: ConvertHeicToJpeg = convertHeicToJpeg,
+  readOrientation: ReadJpegOrientation = readJpegExifOrientation,
+  onProgress?: OnImagePreparationProgress,
+): Promise<CreateImageItemsReport> {
+  const files = Array.from(fileList ?? []);
+  let convertedCount = 0;
+  let ignoredCount = 0;
+  const imageItems: ImageItem[] = [];
+
+  for (const [index, originalFile] of files.entries()) {
+    const sourceType = getImageSourceType(originalFile);
+    onProgress?.({
+      file: originalFile,
+      index,
+      message: 'Preparing files...',
+      sourceType,
+      status: 'queued',
+    });
+
+    if (!isSupportedImageFile(originalFile)) {
+      ignoredCount += 1;
+      onProgress?.({
+        file: originalFile,
+        index,
+        message: 'Ignored: not PNG/JPEG/HEIC/HEIF.',
+        sourceType,
+        status: 'ignored',
+      });
+      continue;
+    }
+
+    const convertedFrom = getHeicImageKind(originalFile);
+    let file = originalFile;
+    let sourceFile: File | undefined;
+
+    if (convertedFrom) {
+      onProgress?.({
+        file: originalFile,
+        index,
+        message: 'Converting HEIC/HEIF to JPEG locally...',
+        sourceType,
+        status: 'converting',
+      });
+
+      try {
+        file = await convertHeic(originalFile, HEIC_CONVERSION_QUALITY);
+        sourceFile = originalFile;
+        convertedCount += 1;
+      } catch {
+        ignoredCount += 1;
+        onProgress?.({
+          file: originalFile,
+          index,
+          message: 'Conversion failed. Try exporting this image as JPEG.',
+          sourceType,
+          status: 'error',
+        });
+        continue;
+      }
+    }
+
+    const previewUrl = createObjectUrl(file);
+    const item: ImageItem = {
+      convertedFrom,
       file,
       flipHorizontal: false,
       flipVertical: false,
+      id: createImageId(),
       pageOrientation: fallbackOrientation,
-      previewUrl: createObjectUrl(file),
-      rotationDegrees: 0 as const,
+      previewUrl,
+      rotationDegrees: 0,
       selected: false,
-    }));
+      sourceFile,
+    };
 
-  return Promise.all(items.map(async (item) => {
     try {
-      const naturalDimensions = await loadDimensions(item.previewUrl);
-      return {
+      const naturalDimensions = await loadDimensions(previewUrl);
+      const exifOrientation = await readOrientation(file).catch(() => 1 as JpegOrientation);
+      const orientedDimensions = getOrientedDimensions(naturalDimensions, exifOrientation);
+      imageItems.push({
         ...item,
-        naturalDimensions,
-        pageOrientation: getOrientationFromDimensions(naturalDimensions, fallbackOrientation),
-      };
+        naturalDimensions: orientedDimensions,
+        pageOrientation: getOrientationFromDimensions(orientedDimensions, fallbackOrientation),
+      });
     } catch {
-      return item;
+      imageItems.push(item);
     }
-  }));
+
+    onProgress?.({
+      file: originalFile,
+      index,
+      message: convertedFrom ? 'Converted to JPEG locally.' : 'Ready',
+      previewUrl,
+      sourceType,
+      status: 'ready',
+    });
+  }
+
+  return {
+    convertedCount,
+    ignoredCount,
+    imageItems,
+  };
 }
 
 export function revokeImageItems(items: Array<Pick<ImageItem, 'previewUrl'> | undefined> | null | undefined, revokeObjectUrl: RevokeObjectUrl | undefined = getRevokeObjectUrl()): void {
@@ -224,6 +360,25 @@ export function canvasToBlob(canvas: HTMLCanvasElement, quality?: number, mime =
   });
 }
 
+export async function convertHeicToJpeg(file: File, quality = HEIC_CONVERSION_QUALITY): Promise<File> {
+  const { default: heic2any } = await import('heic2any');
+  const result = await heic2any({
+    blob: file,
+    quality,
+    toType: 'image/jpeg',
+  });
+  const blob = Array.isArray(result) ? result[0] : result;
+
+  if (!blob) {
+    throw new Error('Unable to convert HEIC/HEIF image.');
+  }
+
+  return new File([blob], getConvertedJpegFileName(file.name), {
+    lastModified: file.lastModified,
+    type: 'image/jpeg',
+  });
+}
+
 function getNextRotation(rotationDegrees: RotationDegrees | undefined): RotationDegrees {
   const currentRotation = rotationDegrees ?? 0;
   return ((currentRotation + 90) % 360) as RotationDegrees;
@@ -239,6 +394,31 @@ function createImageId(): string {
     const value = character === 'x' ? random : (random & 0x3 | 0x8);
     return value.toString(16);
   });
+}
+
+function getHeicImageKind(file: File): 'HEIC' | 'HEIF' | undefined {
+  const type = file.type.toLowerCase();
+  const extension = getFileExtension(file.name);
+
+  if (type === 'image/heif' || extension === 'heif') {
+    return 'HEIF';
+  }
+
+  if (type === 'image/heic' || extension === 'heic') {
+    return 'HEIC';
+  }
+
+  return undefined;
+}
+
+function getFileExtension(fileName: string): string | undefined {
+  const extension = fileName.toLowerCase().split('.').pop();
+  return extension && extension !== fileName.toLowerCase() ? extension : undefined;
+}
+
+function getConvertedJpegFileName(fileName: string): string {
+  const withoutExtension = fileName.replace(/\.(heic|heif)$/i, '');
+  return `${withoutExtension || 'image'}.jpg`;
 }
 
 function getCreateObjectUrl(): CreateObjectUrl {

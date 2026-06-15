@@ -26,6 +26,7 @@ export interface PdfOptions {
 }
 
 export interface ImageItem {
+  convertedFrom?: 'HEIC' | 'HEIF';
   id: string;
   file: File;
   flipHorizontal: boolean;
@@ -35,6 +36,7 @@ export interface ImageItem {
   previewUrl: string;
   rotationDegrees: RotationDegrees;
   selected: boolean;
+  sourceFile?: File;
 }
 
 export interface PdfProgress {

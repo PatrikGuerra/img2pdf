@@ -282,6 +282,21 @@ describe('createPdfFromImages', () => {
     expect(pdfMocks.pdfDoc.embedPng).not.toHaveBeenCalled();
   });
 
+  test('embeds locally converted HEIC files as JPEG images', async () => {
+    const sourceFile = new File(['heic'], 'photo.heic', { type: 'image/heic' });
+    mockFetchMime('image/jpeg');
+
+    await createPdfFromImages([
+      makeImageItem('photo.jpg', 'image/jpeg', 0, {
+        convertedFrom: 'HEIC',
+        sourceFile,
+      }),
+    ]);
+
+    expect(pdfMocks.pdfDoc.embedJpg).toHaveBeenCalledTimes(1);
+    expect(pdfMocks.pdfDoc.embedPng).not.toHaveBeenCalled();
+  });
+
   test('uses canvas when an image has manual rotation', async () => {
     const { canvas, drawImage, rotate, scale, translate, restore } = mockCanvasElement();
 

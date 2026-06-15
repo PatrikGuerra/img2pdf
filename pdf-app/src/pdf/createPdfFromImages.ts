@@ -1,7 +1,7 @@
 import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import type { PDFFont, PDFDocument as PdfLibDocument, PDFImage, PDFPage } from 'pdf-lib';
-import EXIF from 'exif-js';
 import { DEFAULT_PDF_OPTIONS, IMAGE_FITS, PAGE_NUMBER_PLACEMENTS, PAGE_SIZES } from '../constants/pdfOptions';
+import { readJpegExifOrientationFromArrayBuffer } from '../image/exifOrientation';
 import { canvasToBlob, loadImage } from '../image/imageFiles';
 import { getImagePlacement, getPageNumberTextPlacement, getPageSize, PAGE_NUMBER_FONT_SIZE } from './pageLayout';
 import type { FetchedImageData, ImageItem, JpegOrientation, PageNumberingOptions, PdfOptions, PdfProgress, RotationDegrees } from '../types/pdf';
@@ -46,7 +46,7 @@ export async function createPdfFromImages(
       imageItem.file?.type,
     );
     const mime = imageData.mime || imageItem.file?.type;
-    const jpegOrientation = hasManualTransform ? 1 : readJpegOrientation(imageData.arrayBuffer, mime);
+    const jpegOrientation = hasManualTransform ? 1 : readJpegExifOrientationFromArrayBuffer(imageData.arrayBuffer, mime);
     const embeddedImage = await embedImage(pdfDoc, imageData.arrayBuffer, mime);
     const imageOptions = {
       ...resolvedOptions,
@@ -206,20 +206,6 @@ function drawImageToCanvas(
   context.rotate(transform.rotationDegrees * Math.PI / 180);
   context.scale(transform.flipHorizontal ? -1 : 1, transform.flipVertical ? -1 : 1);
   context.drawImage(image, -image.width / 2, -image.height / 2, image.width, image.height);
-}
-
-function readJpegOrientation(arrayBuffer: ArrayBuffer, mime: string | null | undefined): JpegOrientation {
-  if (mime !== 'image/jpeg') {
-    return 1;
-  }
-
-  try {
-    const exif = EXIF.readFromBinaryFile(arrayBuffer);
-    return Number(exif?.Orientation) || 1;
-  } catch (error) {
-    console.error(error);
-    return 1;
-  }
 }
 
 async function embedImage(pdfDoc: PdfLibDocument, arrayBuffer: ArrayBuffer, mime: string | null | undefined): Promise<PDFImage> {

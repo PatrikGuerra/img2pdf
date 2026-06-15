@@ -1,12 +1,27 @@
 import { useState } from 'react';
 import type { DragEvent } from 'react';
+import UploadQueuePanel from './UploadQueuePanel';
+import type { UploadQueueItem } from '../types/upload';
 
 interface LandingProps {
+  isPreparingUpload: boolean;
   onPickFiles: () => void;
+  onClearUpload: () => void;
+  onContinueUpload: () => void;
   onDropFiles: (files: FileList | File[]) => void;
+  preparedImageCount: number;
+  uploadQueue: UploadQueueItem[];
 }
 
-export default function Landing({ onPickFiles, onDropFiles }: LandingProps) {
+export default function Landing({
+  isPreparingUpload,
+  onClearUpload,
+  onContinueUpload,
+  onPickFiles,
+  onDropFiles,
+  preparedImageCount,
+  uploadQueue,
+}: LandingProps) {
   const [dragActive, setDragActive] = useState(false);
 
   const preventDefaultDrag = (event: DragEvent<HTMLDivElement>) => {
@@ -53,7 +68,7 @@ export default function Landing({ onPickFiles, onDropFiles }: LandingProps) {
       >
         <div className="landing-copy">
           <div className="landing-copy-title">
-            Convert JPEG or PNG images to PDF without uploading your sensitive data anywhere.
+            Convert JPEG, PNG, HEIC, or HEIF images to PDF without uploading your sensitive data anywhere.
           </div>
           <div className="landing-copy-note">
             Files are processed entirely on your device and do not get uploaded to any server.
@@ -63,6 +78,13 @@ export default function Landing({ onPickFiles, onDropFiles }: LandingProps) {
           Select Images
         </button>
         <div className="dropzone-text">or drop images here</div>
+        <UploadQueuePanel
+          isPreparing={isPreparingUpload}
+          items={uploadQueue}
+          onClear={onClearUpload}
+          onContinue={onContinueUpload}
+          preparedImageCount={preparedImageCount}
+        />
       </div>
     </div>
   );

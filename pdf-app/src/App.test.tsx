@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
+import heic2any from 'heic2any';
 import App from './App';
 import {
   IMAGE_FITS,
@@ -23,15 +24,24 @@ vi.mock('./download/downloadPdf', () => ({
   downloadPdf: vi.fn(),
 }));
 
+vi.mock('heic2any', () => ({
+  default: vi.fn(async () => new Blob(['converted'], { type: 'image/jpeg' })),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(createPdfFromImages).mockResolvedValue(new Uint8Array([1, 2, 3]));
+  vi.mocked(heic2any).mockResolvedValue(new Blob(['converted'], { type: 'image/jpeg' }));
 });
 
 test('renders the initial landing view', () => {
   render(<App />);
 
-  expect(screen.getByText(/Convert JPEG or PNG images to PDF/i)).toBeInTheDocument();
+  expect(screen.getByText(/Convert JPEG, PNG, HEIC, or HEIF images to PDF/i)).toBeInTheDocument();
+  expect(screen.getByTestId('file-input')).toHaveAttribute(
+    'accept',
+    'image/png,image/jpeg,image/heic,image/heif,.heic,.heif',
+  );
   const dropzone = screen.getByRole('region', { name: /drop images here/i });
 
   expect(dropzone).toHaveClass('dropzone');
@@ -45,7 +55,7 @@ test('adds supported image files and exposes PDF options', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
 
   expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
   expect(screen.getByText('Selected: Page 1')).toBeInTheDocument();
@@ -56,6 +66,7 @@ test('adds supported image files and exposes PDF options', async () => {
 });
 
 test('adds supported image files dropped on the landing dropzone', async () => {
+  const user = userEvent.setup();
   const file = new File(['image'], 'dropped.png', { type: 'image/png' });
 
   render(<App />);
@@ -76,9 +87,57 @@ test('adds supported image files dropped on the landing dropzone', async () => {
     },
   });
 
+  await continueUpload(user);
+
   expect(await screen.findByRole('button', { name: /select page 1/i })).toBeInTheDocument();
   expect(screen.getByText('Selected: Page 1')).toBeInTheDocument();
   expect(URL.createObjectURL).toHaveBeenCalledWith(file);
+});
+
+test('shows selected PNG and JPEG files as ready before continuing', async () => {
+  const user = userEvent.setup();
+  const png = new File(['png'], 'photo.png', { type: 'image/png' });
+  const jpeg = new File(['jpeg'], 'scan.jpg', { type: 'image/jpeg' });
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), [png, jpeg]);
+
+  expect(await screen.findByText('photo.png')).toBeInTheDocument();
+  expect(screen.getByText('scan.jpg')).toBeInTheDocument();
+  expect(screen.getByAltText('Preview of photo.png')).toBeInTheDocument();
+  expect(screen.getByAltText('Preview of scan.jpg')).toBeInTheDocument();
+  expect(screen.getAllByText('Ready')).toHaveLength(2);
+  expect(screen.getByRole('button', { name: 'Continue with 2 images' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /select page 1/i })).not.toBeInTheDocument();
+
+  await continueUpload(user);
+
+  expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /select page 2/i })).toBeInTheDocument();
+});
+
+test('keeps already prepared files when more files are selected before continuing', async () => {
+  const user = userEvent.setup();
+  const first = new File(['one'], 'one.png', { type: 'image/png' });
+  const second = new File(['two'], 'two.png', { type: 'image/png' });
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), first);
+  expect(await screen.findByText('one.png')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Continue with 1 image' })).toBeInTheDocument();
+
+  await user.upload(screen.getByTestId('file-input'), second);
+
+  expect(await screen.findByText('one.png')).toBeInTheDocument();
+  expect(screen.getByText('two.png')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Continue with 2 images' })).toBeInTheDocument();
+
+  await continueUpload(user);
+
+  expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /select page 2/i })).toBeInTheDocument();
 });
 
 test('starts with the expected default PDF options', async () => {
@@ -87,7 +146,7 @@ test('starts with the expected default PDF options', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
 
   expect(screen.getByRole('button', { name: 'A4' })).toHaveAttribute('aria-pressed', 'true');
   expect(getOptionButton('Portrait')).toHaveAttribute('aria-pressed', 'true');
@@ -113,7 +172,7 @@ test('keeps fixed-page-only options visible but disabled for same-as-image pages
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
   await user.click(screen.getByRole('button', { name: 'Same as Image' }));
 
   expect(screen.getByText('Page margin')).toBeInTheDocument();
@@ -135,6 +194,7 @@ test('keeps fixed-page-only options visible but disabled for same-as-image pages
 });
 
 test('shows an alert for ignored files and keeps only supported images', async () => {
+  const user = userEvent.setup();
   const image = new File(['image'], 'photo.png', { type: 'image/png' });
   const text = new File(['text'], 'notes.txt', { type: 'text/plain' });
   const pdf = new File(['pdf'], 'document.pdf', { type: 'application/pdf' });
@@ -145,9 +205,120 @@ test('shows an alert for ignored files and keeps only supported images', async (
     target: { files: [image, text, pdf] },
   });
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('2 files were not PNG/JPEG.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('2 files were not PNG/JPEG/HEIC/HEIF.');
+  expect(screen.getAllByText('Ignored: not PNG/JPEG/HEIC/HEIF.')).toHaveLength(2);
+  expect(screen.queryByRole('button', { name: /select page 1/i })).not.toBeInTheDocument();
+  await continueUpload(user);
   expect(await screen.findByRole('button', { name: /select page 1/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /select page 2/i })).not.toBeInTheDocument();
+});
+
+test('converts HEIC uploads locally and passes converted JPEGs to PDF generation', async () => {
+  const user = userEvent.setup();
+  const sourceFile = new File([new Uint8Array(2048)], 'iphone.heic', { type: 'image/heic' });
+  let resolveConversion: ((blob: Blob) => void) | undefined;
+  vi.mocked(heic2any).mockReturnValue(new Promise((resolve) => {
+    resolveConversion = resolve;
+  }));
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), sourceFile);
+
+  expect(await screen.findByText('iphone.heic')).toBeInTheDocument();
+  expect(screen.getByText('Converting HEIC/HEIF to JPEG locally...')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /continue with/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /select page 1/i })).not.toBeInTheDocument();
+
+  if (!resolveConversion) {
+    throw new Error('Expected HEIC conversion resolver to be set.');
+  }
+
+  resolveConversion(new Blob(['converted'], { type: 'image/jpeg' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('1 HEIC/HEIF file was converted to JPEG locally.');
+  expect(screen.getByText('Converted to JPEG locally.')).toBeInTheDocument();
+  expect(screen.getByAltText('Preview of iphone.heic')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Continue with 1 image' })).toBeInTheDocument();
+  expect(heic2any).toHaveBeenCalledWith({
+    blob: sourceFile,
+    quality: 0.95,
+    toType: 'image/jpeg',
+  });
+
+  const previewFile = vi.mocked(URL.createObjectURL).mock.calls[0][0] as File;
+  expect(previewFile).not.toBe(sourceFile);
+  expect(previewFile.name).toBe('iphone.jpg');
+  expect(previewFile.type).toBe('image/jpeg');
+
+  await continueUpload(user);
+  expect(screen.getByText(/1 image .* estimated 2\.0 KB/)).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: /generate pdf/i }));
+
+  await waitFor(() => {
+    const [images] = vi.mocked(createPdfFromImages).mock.calls[0];
+    expect(images[0]).toEqual(expect.objectContaining({
+      convertedFrom: 'HEIC',
+      file: expect.objectContaining({
+        name: 'iphone.jpg',
+        type: 'image/jpeg',
+      }),
+      sourceFile,
+    }));
+  });
+});
+
+test('combines local conversion and ignored file feedback', async () => {
+  const user = userEvent.setup();
+  const sourceFile = new File(['heif'], 'photo.heif', { type: '' });
+  const text = new File(['text'], 'notes.txt', { type: 'text/plain' });
+
+  render(<App />);
+
+  fireEvent.change(screen.getByTestId('file-input'), {
+    target: { files: [sourceFile, text] },
+  });
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '1 HEIC/HEIF file was converted to JPEG locally. 1 file was not PNG/JPEG/HEIC/HEIF.',
+  );
+  expect(screen.getByText('Converted to JPEG locally.')).toBeInTheDocument();
+  expect(screen.getByText('Ignored: not PNG/JPEG/HEIC/HEIF.')).toBeInTheDocument();
+  await continueUpload(user);
+  expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /select page 2/i })).not.toBeInTheDocument();
+});
+
+test('shows HEIC conversion failures without creating a page', async () => {
+  const user = userEvent.setup();
+  const sourceFile = new File(['heic'], 'broken.heic', { type: 'image/heic' });
+  vi.mocked(heic2any).mockRejectedValue(new Error('bad heic'));
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), sourceFile);
+
+  expect(await screen.findByText('Conversion failed. Try exporting this image as JPEG.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Continue with 0 images' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: /select page 1/i })).not.toBeInTheDocument();
+  expect(URL.createObjectURL).not.toHaveBeenCalled();
+});
+
+test('clears the upload selection and allows selecting the same file again', async () => {
+  const user = userEvent.setup();
+  const file = new File(['image'], 'photo.png', { type: 'image/png' });
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), file);
+  expect(await screen.findByText('photo.png')).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Clear selection' }));
+
+  expect(screen.queryByText('photo.png')).not.toBeInTheDocument();
+  await uploadAndContinue(user, file);
+
+  expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
 });
 
 test('resets the file input so the same file can be uploaded again', async () => {
@@ -156,8 +327,28 @@ test('resets the file input so the same file can be uploaded again', async () =>
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
+  await uploadAndContinue(user, file);
+
+  expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /select page 2/i })).toBeInTheDocument();
+});
+
+test('add page uses the preparation overlay before appending pages', async () => {
+  const user = userEvent.setup();
+  const firstFile = new File(['one'], 'one.png', { type: 'image/png' });
+  const secondFile = new File(['two'], 'two.png', { type: 'image/png' });
+
+  render(<App />);
+
+  await uploadAndContinue(user, firstFile);
+  await user.upload(screen.getByTestId('file-input'), secondFile);
+
+  expect(await screen.findByRole('dialog', { name: 'Prepare selected files' })).toBeInTheDocument();
+  expect(screen.getByText('two.png')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /select page 2/i })).not.toBeInTheDocument();
+
+  await continueUpload(user);
 
   expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /select page 2/i })).toBeInTheDocument();
@@ -170,7 +361,7 @@ test('shows page numbers and automatic page orientations after upload', async ()
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), [portraitFile, landscapeFile]);
+  await uploadAndContinue(user, [portraitFile, landscapeFile]);
 
   expect(await screen.findByText('Page 1')).toBeInTheDocument();
   expect(screen.getByText('Page 2')).toBeInTheDocument();
@@ -186,7 +377,7 @@ test('revokes the object URL when a page is deleted', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
   const previewUrl = vi.mocked(URL.createObjectURL).mock.results[0].value;
 
   await user.click(screen.getByRole('button', { name: 'Remove' }));
@@ -206,7 +397,7 @@ test('canceling page removal keeps the page and its object URL', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
   await screen.findByRole('button', { name: /select page 1/i });
   await user.click(screen.getByRole('button', { name: 'Remove' }));
 
@@ -223,7 +414,7 @@ test('revokes remaining object URLs when the app unmounts', async () => {
   const secondFile = new File(['two'], 'two.jpg', { type: 'image/jpeg' });
   const { unmount } = render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile]);
+  await uploadAndContinue(user, [firstFile, secondFile]);
   const previewUrls = vi.mocked(URL.createObjectURL).mock.results.map((result) => result.value);
 
   unmount();
@@ -239,7 +430,7 @@ test('reorders pages via drag-and-drop data transfer', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile]);
+  await uploadAndContinue(user, [firstFile, secondFile]);
 
   const firstPage = screen.getByRole('button', { name: /select page 1/i });
   const secondPage = screen.getByRole('button', { name: /select page 2/i });
@@ -271,7 +462,7 @@ test('per-page orientation updates only the selected page', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile, thirdFile]);
+  await uploadAndContinue(user, [firstFile, secondFile, thirdFile]);
   await selectPage(user, 3);
   await user.click(getToolbarButton('Landscape'));
   await user.click(screen.getByRole('button', { name: /generate pdf/i }));
@@ -292,7 +483,7 @@ test('passes updated options to PDF generation and downloads the result', async 
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
   await user.clear(screen.getByLabelText('PDF name'));
   await user.type(screen.getByLabelText('PDF name'), 'scan bundle');
   await user.click(screen.getByRole('button', { name: 'Oficio' }));
@@ -334,7 +525,7 @@ test('custom page margin accepts decimal millimeter values', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
   const marginInput = screen.getByRole('spinbutton', { name: /custom margin/i });
 
   await user.click(screen.getByRole('button', { name: '20 mm' }));
@@ -367,7 +558,7 @@ test('page numbering controls enable preview and pass options to PDF generation'
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
 
   expect(screen.queryByLabelText('Preview page number 1')).not.toBeInTheDocument();
 
@@ -407,7 +598,7 @@ test('flip controls update the page passed to PDF generation', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
   await user.click(screen.getByRole('button', { name: 'Flip horizontal' }));
   await user.click(screen.getByRole('button', { name: 'Flip vertical' }));
   await user.click(screen.getByRole('button', { name: /generate pdf/i }));
@@ -435,7 +626,7 @@ test('shows PDF generation progress from the progress callback', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile]);
+  await uploadAndContinue(user, [firstFile, secondFile]);
   await user.click(screen.getByRole('button', { name: /generate pdf/i }));
 
   expect(screen.getByText('Processing 1 of 2')).toBeInTheDocument();
@@ -457,7 +648,7 @@ test('global orientation applies directly when pages are uniform', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
   await user.click(getOptionButton('Landscape'));
   await user.click(screen.getByRole('button', { name: /generate pdf/i }));
 
@@ -477,7 +668,7 @@ test('global orientation warns before overwriting mixed page orientations', asyn
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), [portraitFile, landscapeFile]);
+  await uploadAndContinue(user, [portraitFile, landscapeFile]);
   expect(await screen.findByText('Page 2')).toBeInTheDocument();
   expect(screen.queryByText('Mixed page orientations')).not.toBeInTheDocument();
 
@@ -508,7 +699,7 @@ test('page controls move, rotate and remove pages without drag-and-drop', async 
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile, thirdFile]);
+  await uploadAndContinue(user, [firstFile, secondFile, thirdFile]);
   await selectPage(user, 3);
   await user.click(screen.getByRole('button', { name: 'Move left' }));
   await user.click(screen.getByRole('button', { name: 'Rotate' }));
@@ -532,7 +723,7 @@ test('shows a single contextual toolbar for the selected page', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile]);
+  await uploadAndContinue(user, [firstFile, secondFile]);
 
   expect(screen.getByText('Selected: Page 1')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /remove page 1/i })).not.toBeInTheDocument();
@@ -567,7 +758,7 @@ test('contextual toolbar keeps selection on the next page after removing the sel
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile, thirdFile]);
+  await uploadAndContinue(user, [firstFile, secondFile, thirdFile]);
   await selectPage(user, 2);
   await user.click(screen.getByRole('button', { name: 'Remove' }));
   await user.click(within(screen.getByRole('dialog', { name: 'Remove page?' })).getByRole('button', { name: 'Remove' }));
@@ -582,7 +773,7 @@ test('contextual toolbar uses the fixed responsive layout classes', async () => 
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
 
   const toolbar = screen.getByText('Selected: Page 1').closest('.selected-page-toolbar');
 
@@ -599,7 +790,7 @@ test('clears busy state and reports an error when PDF generation fails', async (
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
   await user.click(screen.getByRole('button', { name: /generate pdf/i }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent('PDF failed');
@@ -619,7 +810,7 @@ test('does not start a second PDF generation while busy', async () => {
 
   render(<App />);
 
-  await user.upload(screen.getByTestId('file-input'), file);
+  await uploadAndContinue(user, file);
   const generateButton = screen.getByRole('button', { name: /generate pdf/i });
 
   await user.click(generateButton);
@@ -638,6 +829,18 @@ test('does not start a second PDF generation while busy', async () => {
     expect(downloadPdf).toHaveBeenCalledWith(new Uint8Array([4, 5, 6]), 'file.pdf');
   });
 });
+
+async function uploadAndContinue(
+  user: ReturnType<typeof userEvent.setup>,
+  files: File | File[],
+): Promise<void> {
+  await user.upload(screen.getByTestId('file-input'), files);
+  await continueUpload(user);
+}
+
+async function continueUpload(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(await screen.findByRole('button', { name: /continue with \d+ images?/i }));
+}
 
 function getImageIdFromDragStart(element: HTMLElement): string {
   const dataTransfer = {

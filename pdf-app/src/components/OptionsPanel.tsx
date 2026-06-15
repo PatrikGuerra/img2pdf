@@ -218,21 +218,6 @@ export default function OptionsPanel({
         </OptionButton>
       </OptionSection>
 
-      <OptionSection title="Compression">
-        <OptionButton
-          active={options.compressImages}
-          onClick={() => onChangeOptions({ compressImages: true })}
-        >
-          Compress Images
-        </OptionButton>
-        <OptionButton
-          active={!options.compressImages}
-          onClick={() => onChangeOptions({ compressImages: false })}
-        >
-          Don&apos;t Compress
-        </OptionButton>
-      </OptionSection>
-
       <OptionSection title="Page numbers">
         <OptionButton
           active={options.pageNumbering.enabled}
@@ -297,6 +282,21 @@ export default function OptionsPanel({
           onClick={() => updatePageNumbering({ placement: PAGE_NUMBER_PLACEMENTS.OVERLAY })}
         >
           {PAGE_NUMBER_PLACEMENT_LABELS[PAGE_NUMBER_PLACEMENTS.OVERLAY]}
+        </OptionButton>
+      </OptionSection>
+
+      <OptionSection title="Compression">
+        <OptionButton
+          active={options.compressImages}
+          onClick={() => onChangeOptions({ compressImages: true })}
+        >
+          Compress Images
+        </OptionButton>
+        <OptionButton
+          active={!options.compressImages}
+          onClick={() => onChangeOptions({ compressImages: false })}
+        >
+          Don&apos;t Compress
         </OptionButton>
       </OptionSection>
 

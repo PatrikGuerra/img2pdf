@@ -6,14 +6,16 @@ import ConfirmationDialog from './components/ConfirmationDialog';
 import ImageGrid from './components/ImageGrid';
 import Landing from './components/Landing';
 import OptionsPanel from './components/OptionsPanel';
+import UploadQueuePanel from './components/UploadQueuePanel';
 import { DEFAULT_PDF_OPTIONS, PAGE_ORIENTATION_LABELS } from './constants/pdfOptions';
 import { downloadPdf } from './download/downloadPdf';
 import { normalizePdfFileName } from './download/pdfFileName';
 import {
   clearImageSelection,
-  createImageItems,
+  createImageItemsReport,
   deleteImageById,
   flipImageById,
+  getImageSourceType,
   hasMixedImageOrientations,
   moveImageByOffset,
   moveImageBefore,
@@ -26,11 +28,15 @@ import {
 import { getImageSummary } from './image/imageSummary';
 import { createPdfFromImages } from './pdf/createPdfFromImages';
 import type { FlipAxis, ImageItem, PageOrientation, PdfOptions, PdfProgress } from './types/pdf';
+import type { ImagePreparationProgress, UploadQueueItem } from './types/upload';
 
 type AppProgress = PdfProgress | { current: number; total: number };
 
 export default function App() {
   const [images, setImages] = useState<ImageItem[]>([]);
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+  const [preparedImageItems, setPreparedImageItems] = useState<ImageItem[]>([]);
+  const [isPreparingUpload, setIsPreparingUpload] = useState(false);
   const [options, setOptions] = useState<PdfOptions>(DEFAULT_PDF_OPTIONS);
   const [pdfFileName, setPdfFileName] = useState('file.pdf');
   const [forceShowOptions, setForceShowOptions] = useState(false);
@@ -41,37 +47,122 @@ export default function App() {
   const [lastError, setLastError] = useState<string | undefined>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
   const imagesRef = useRef(images);
+  const preparedImageItemsRef = useRef(preparedImageItems);
+  const uploadQueueRef = useRef(uploadQueue);
+  const activeUploadRunsRef = useRef(0);
+  const uploadRunIdRef = useRef(0);
 
   useEffect(() => {
     imagesRef.current = images;
   }, [images]);
 
+  useEffect(() => {
+    preparedImageItemsRef.current = preparedImageItems;
+  }, [preparedImageItems]);
+
+  useEffect(() => {
+    uploadQueueRef.current = uploadQueue;
+  }, [uploadQueue]);
+
   useEffect(() => () => {
     revokeImageItems(imagesRef.current);
+    revokeImageItems(preparedImageItemsRef.current);
   }, []);
 
   const pickFiles = () => {
     fileInput.current?.click();
   };
 
-  const handleFiles = async (fileList: FileList | File[] | null | undefined) => {
-    const files = Array.from(fileList ?? []);
-    const imageItems = await createImageItems(files, undefined, options.orientation);
-
-    if (imageItems.length > 0) {
-      setImages((currentImages) => appendImageItemsWithSelection(currentImages, imageItems));
-    }
-
-    if (files.length > 0 && imageItems.length < files.length) {
-      const ignoredCount = files.length - imageItems.length;
-      setLastError(`${ignoredCount} file${ignoredCount === 1 ? ' was' : 's were'} not PNG/JPEG.`);
-    } else {
-      setLastError(undefined);
-    }
-
+  const resetFileInput = () => {
     if (fileInput.current) {
       fileInput.current.value = '';
     }
+  };
+
+  const handleFiles = async (fileList: FileList | File[] | null | undefined) => {
+    const files = Array.from(fileList ?? []);
+    if (files.length < 1) {
+      resetFileInput();
+      return;
+    }
+
+    const uploadRunId = uploadRunIdRef.current;
+    const startIndex = uploadQueueRef.current.length;
+    const nextQueueItems = createInitialUploadQueue(files, startIndex);
+
+    setUploadQueue((currentItems) => {
+      const nextItems = [...currentItems, ...nextQueueItems];
+      uploadQueueRef.current = nextItems;
+      return nextItems;
+    });
+    activeUploadRunsRef.current += 1;
+    setIsPreparingUpload(true);
+    setLastError(undefined);
+    resetFileInput();
+
+    try {
+      const report = await createImageItemsReport(
+        files,
+        undefined,
+        options.orientation,
+        undefined,
+        undefined,
+        undefined,
+        (progress) => {
+          if (uploadRunIdRef.current !== uploadRunId) {
+            return;
+          }
+
+          setUploadQueue((currentItems) => {
+            const nextItems = updateUploadQueueItem(currentItems, {
+              ...progress,
+              index: startIndex + progress.index,
+            });
+            uploadQueueRef.current = nextItems;
+            return nextItems;
+          });
+        },
+      );
+
+      if (uploadRunIdRef.current !== uploadRunId) {
+        revokeImageItems(report.imageItems);
+        return;
+      }
+
+      setPreparedImageItems((currentItems) => [...currentItems, ...report.imageItems]);
+      setLastError(getFileFeedbackMessage(report.convertedCount, report.ignoredCount));
+    } finally {
+      if (uploadRunIdRef.current === uploadRunId) {
+        activeUploadRunsRef.current = Math.max(0, activeUploadRunsRef.current - 1);
+        setIsPreparingUpload(activeUploadRunsRef.current > 0);
+      }
+    }
+  };
+
+  const continuePreparedUpload = () => {
+    if (isPreparingUpload || preparedImageItems.length < 1) {
+      return;
+    }
+
+    setImages((currentImages) => appendImageItemsWithSelection(currentImages, preparedImageItems));
+    setPreparedImageItems([]);
+    setUploadQueue([]);
+    uploadQueueRef.current = [];
+    setLastError(undefined);
+  };
+
+  const clearPreparedUpload = () => {
+    uploadRunIdRef.current += 1;
+    activeUploadRunsRef.current = 0;
+    setIsPreparingUpload(false);
+    setUploadQueue([]);
+    uploadQueueRef.current = [];
+    setLastError(undefined);
+    setPreparedImageItems((currentItems) => {
+      revokeImageItems(currentItems);
+      return [];
+    });
+    resetFileInput();
   };
 
   const updateOptions = (nextOptions: Partial<PdfOptions>) => {
@@ -167,7 +258,7 @@ export default function App() {
 
   const fileInputElement = (
     <input
-      accept="image/png,image/jpeg"
+      accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"
       data-testid="file-input"
       multiple
       onChange={(event: ChangeEvent<HTMLInputElement>) => handleFiles(event.target.files)}
@@ -189,7 +280,15 @@ export default function App() {
         {pageHeader}
         {lastError ? <div className="status-message" role="alert">{lastError}</div> : null}
         {fileInputElement}
-        <Landing onPickFiles={pickFiles} onDropFiles={handleFiles} />
+        <Landing
+          isPreparingUpload={isPreparingUpload}
+          onClearUpload={clearPreparedUpload}
+          onContinueUpload={continuePreparedUpload}
+          onPickFiles={pickFiles}
+          onDropFiles={handleFiles}
+          preparedImageCount={preparedImageItems.length}
+          uploadQueue={uploadQueue}
+        />
       </div>
     );
   }
@@ -230,6 +329,19 @@ export default function App() {
       />
       {fileInputElement}
       <BusyOverlay busy={busy} progress={progress} />
+      {uploadQueue.length > 0 ? (
+        <div className="upload-preparation-backdrop" role="presentation">
+          <div aria-label="Prepare selected files" aria-modal="true" className="upload-preparation-dialog" role="dialog">
+            <UploadQueuePanel
+              isPreparing={isPreparingUpload}
+              items={uploadQueue}
+              onClear={clearPreparedUpload}
+              onContinue={continuePreparedUpload}
+              preparedImageCount={preparedImageItems.length}
+            />
+          </div>
+        </div>
+      ) : null}
       {deleteConfirmation ? (
         <ConfirmationDialog
           body={`Page ${deleteConfirmation.pageNumber} will be removed from the PDF.`}
@@ -288,4 +400,54 @@ function deleteImageAndSelectFallback(currentImages: ImageItem[], id: string): I
     ...image,
     selected: index === fallbackIndex,
   }));
+}
+
+function createInitialUploadQueue(files: File[], startIndex = 0): UploadQueueItem[] {
+  return files.map((file, index) => ({
+    id: createUploadQueueId(startIndex + index),
+    fileName: file.name || `File ${index + 1}`,
+    fileSize: file.size,
+    message: 'Preparing files...',
+    sourceType: getImageSourceType(file),
+    status: 'queued',
+  }));
+}
+
+function updateUploadQueueItem(
+  currentItems: UploadQueueItem[],
+  progress: ImagePreparationProgress,
+): UploadQueueItem[] {
+  return currentItems.map((item, index) => (
+    index === progress.index
+      ? {
+        ...item,
+        message: progress.message,
+        previewUrl: progress.previewUrl,
+        sourceType: progress.sourceType,
+        status: progress.status,
+      }
+      : item
+  ));
+}
+
+function createUploadQueueId(index: number): string {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `upload-${Date.now()}-${index}`;
+}
+
+function getFileFeedbackMessage(convertedCount: number, ignoredCount: number): string | undefined {
+  const messages: string[] = [];
+
+  if (convertedCount > 0) {
+    messages.push(`${convertedCount} HEIC/HEIF file${convertedCount === 1 ? ' was' : 's were'} converted to JPEG locally.`);
+  }
+
+  if (ignoredCount > 0) {
+    messages.push(`${ignoredCount} file${ignoredCount === 1 ? ' was' : 's were'} not PNG/JPEG/HEIC/HEIF.`);
+  }
+
+  return messages.length > 0 ? messages.join(' ') : undefined;
 }
