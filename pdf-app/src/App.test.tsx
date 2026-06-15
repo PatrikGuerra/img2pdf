@@ -24,8 +24,11 @@ test('renders the initial landing view', () => {
   render(<App />);
 
   expect(screen.getByText(/Convert JPEG or PNG images to PDF/i)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /select images/i })).toBeInTheDocument();
-  expect(screen.getByText(/or drop images here/i)).toBeInTheDocument();
+  const dropzone = screen.getByRole('region', { name: /drop images here/i });
+
+  expect(dropzone).toHaveClass('dropzone');
+  expect(within(dropzone).getByRole('button', { name: /select images/i })).toBeInTheDocument();
+  expect(within(dropzone).getByText(/or drop images here/i)).toBeInTheDocument();
 });
 
 test('adds supported image files and exposes PDF options', async () => {
@@ -42,6 +45,32 @@ test('adds supported image files and exposes PDF options', async () => {
   expect(screen.getByRole('button', { name: 'A4' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: 'US Letter' })).toHaveAttribute('aria-pressed', 'false');
   expect(screen.getByRole('button', { name: 'Oficio' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('adds supported image files dropped on the landing dropzone', async () => {
+  const file = new File(['image'], 'dropped.png', { type: 'image/png' });
+
+  render(<App />);
+
+  const dropzone = screen.getByRole('region', { name: /drop images here/i });
+  fireEvent.dragEnter(dropzone, {
+    dataTransfer: {
+      files: [file],
+      items: [],
+    },
+  });
+  expect(dropzone).toHaveClass('dropzone--active');
+
+  fireEvent.drop(dropzone, {
+    dataTransfer: {
+      files: [file],
+      items: [],
+    },
+  });
+
+  expect(await screen.findByRole('button', { name: /select page 1/i })).toBeInTheDocument();
+  expect(screen.getByText('Selected: Page 1')).toBeInTheDocument();
+  expect(URL.createObjectURL).toHaveBeenCalledWith(file);
 });
 
 test('starts with the expected default PDF options', async () => {
