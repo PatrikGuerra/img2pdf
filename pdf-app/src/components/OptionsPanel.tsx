@@ -3,6 +3,12 @@ import type { ChangeEvent, ReactNode } from 'react';
 import {
   IMAGE_FIT_LABELS,
   IMAGE_FITS,
+  PAGE_NUMBER_HORIZONTAL_ALIGNMENT_LABELS,
+  PAGE_NUMBER_HORIZONTAL_ALIGNMENTS,
+  PAGE_NUMBER_PLACEMENT_LABELS,
+  PAGE_NUMBER_PLACEMENTS,
+  PAGE_NUMBER_VERTICAL_POSITION_LABELS,
+  PAGE_NUMBER_VERTICAL_POSITIONS,
   PAGE_MARGIN_LABELS,
   PAGE_MARGINS,
   PAGE_ORIENTATION_LABELS,
@@ -11,7 +17,7 @@ import {
   PAGE_SIZES,
 } from '../constants/pdfOptions';
 import { mmToPdfPoints } from '../pdf/pageLayout';
-import type { PageOrientation, PdfOptions } from '../types/pdf';
+import type { PageNumberingOptions, PageOrientation, PdfOptions } from '../types/pdf';
 
 interface OptionsPanelProps {
   forceShowOptions: boolean;
@@ -54,6 +60,15 @@ export default function OptionsPanel({
   const updateMargin = (margin: number) => {
     onChangeOptions({ margin });
     setMarginInputValue(formatMarginInputValue(margin));
+  };
+
+  const updatePageNumbering = (pageNumbering: Partial<PageNumberingOptions>) => {
+    onChangeOptions({
+      pageNumbering: {
+        ...options.pageNumbering,
+        ...pageNumbering,
+      },
+    });
   };
 
   const changeCustomMargin = (event: ChangeEvent<HTMLInputElement>) => {
@@ -215,6 +230,73 @@ export default function OptionsPanel({
           onClick={() => onChangeOptions({ compressImages: false })}
         >
           Don&apos;t Compress
+        </OptionButton>
+      </OptionSection>
+
+      <OptionSection title="Page numbers">
+        <OptionButton
+          active={options.pageNumbering.enabled}
+          onClick={() => updatePageNumbering({ enabled: true })}
+        >
+          Show page numbers
+        </OptionButton>
+        <OptionButton
+          active={!options.pageNumbering.enabled}
+          onClick={() => updatePageNumbering({ enabled: false })}
+        >
+          Hide page numbers
+        </OptionButton>
+        <div className="option-row-label">Position</div>
+        <OptionButton
+          active={options.pageNumbering.verticalPosition === PAGE_NUMBER_VERTICAL_POSITIONS.TOP}
+          disabled={!options.pageNumbering.enabled}
+          onClick={() => updatePageNumbering({ verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.TOP })}
+        >
+          {PAGE_NUMBER_VERTICAL_POSITION_LABELS[PAGE_NUMBER_VERTICAL_POSITIONS.TOP]}
+        </OptionButton>
+        <OptionButton
+          active={options.pageNumbering.verticalPosition === PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM}
+          disabled={!options.pageNumbering.enabled}
+          onClick={() => updatePageNumbering({ verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM })}
+        >
+          {PAGE_NUMBER_VERTICAL_POSITION_LABELS[PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM]}
+        </OptionButton>
+        <div className="option-row-label">Alignment</div>
+        <OptionButton
+          active={options.pageNumbering.horizontalAlignment === PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.LEFT}
+          disabled={!options.pageNumbering.enabled}
+          onClick={() => updatePageNumbering({ horizontalAlignment: PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.LEFT })}
+        >
+          {PAGE_NUMBER_HORIZONTAL_ALIGNMENT_LABELS[PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.LEFT]}
+        </OptionButton>
+        <OptionButton
+          active={options.pageNumbering.horizontalAlignment === PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.CENTER}
+          disabled={!options.pageNumbering.enabled}
+          onClick={() => updatePageNumbering({ horizontalAlignment: PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.CENTER })}
+        >
+          {PAGE_NUMBER_HORIZONTAL_ALIGNMENT_LABELS[PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.CENTER]}
+        </OptionButton>
+        <OptionButton
+          active={options.pageNumbering.horizontalAlignment === PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.RIGHT}
+          disabled={!options.pageNumbering.enabled}
+          onClick={() => updatePageNumbering({ horizontalAlignment: PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.RIGHT })}
+        >
+          {PAGE_NUMBER_HORIZONTAL_ALIGNMENT_LABELS[PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.RIGHT]}
+        </OptionButton>
+        <div className="option-row-label">Placement</div>
+        <OptionButton
+          active={options.pageNumbering.placement === PAGE_NUMBER_PLACEMENTS.RESERVED}
+          disabled={!options.pageNumbering.enabled}
+          onClick={() => updatePageNumbering({ placement: PAGE_NUMBER_PLACEMENTS.RESERVED })}
+        >
+          {PAGE_NUMBER_PLACEMENT_LABELS[PAGE_NUMBER_PLACEMENTS.RESERVED]}
+        </OptionButton>
+        <OptionButton
+          active={options.pageNumbering.placement === PAGE_NUMBER_PLACEMENTS.OVERLAY}
+          disabled={!options.pageNumbering.enabled}
+          onClick={() => updatePageNumbering({ placement: PAGE_NUMBER_PLACEMENTS.OVERLAY })}
+        >
+          {PAGE_NUMBER_PLACEMENT_LABELS[PAGE_NUMBER_PLACEMENTS.OVERLAY]}
         </OptionButton>
       </OptionSection>
 

@@ -1,8 +1,26 @@
 import { PageSizes } from 'pdf-lib';
 import { expect, test } from 'vitest';
-import { DEFAULT_PDF_OPTIONS, IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from '../constants/pdfOptions';
-import type { PdfOptions } from '../types/pdf';
-import { getFixedPageSize, getImagePlacement, getPageSize, mmToPdfPoints } from './pageLayout';
+import {
+  DEFAULT_PDF_OPTIONS,
+  IMAGE_FITS,
+  PAGE_MARGINS,
+  PAGE_NUMBER_HORIZONTAL_ALIGNMENTS,
+  PAGE_NUMBER_PLACEMENTS,
+  PAGE_NUMBER_VERTICAL_POSITIONS,
+  PAGE_ORIENTATIONS,
+  PAGE_SIZES,
+} from '../constants/pdfOptions';
+import type { PageNumberingOptions, PdfOptions } from '../types/pdf';
+import {
+  getFixedPageSize,
+  getImagePlacement,
+  getPageNumberTextPlacement,
+  getPageSize,
+  mmToPdfPoints,
+  PAGE_NUMBER_FONT_SIZE,
+  PAGE_NUMBER_INSET,
+  PAGE_NUMBER_RESERVED_HEIGHT,
+} from './pageLayout';
 
 function makeOptions(options: Partial<PdfOptions>): PdfOptions {
   return { ...DEFAULT_PDF_OPTIONS, ...options };
@@ -55,6 +73,99 @@ test('calculates centered contain placement with margin', () => {
   expect(placement.y).toBeCloseTo(209.45, 2);
 });
 
+test('keeps placement unchanged when page numbering is disabled', () => {
+  const placement = getImagePlacement(
+    600,
+    800,
+    1200,
+    800,
+    PAGE_MARGINS.NONE,
+    IMAGE_FITS.CONTAIN,
+    makePageNumbering({ enabled: false }),
+  );
+
+  expect(placement).toEqual(getImagePlacement(600, 800, 1200, 800, PAGE_MARGINS.NONE, IMAGE_FITS.CONTAIN));
+});
+
+test('reserves bottom footer space for page numbering', () => {
+  const placement = getImagePlacement(
+    600,
+    800,
+    1200,
+    800,
+    PAGE_MARGINS.NONE,
+    IMAGE_FITS.CONTAIN,
+    makePageNumbering({
+      enabled: true,
+      placement: PAGE_NUMBER_PLACEMENTS.RESERVED,
+      verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM,
+    }),
+  );
+
+  expect(placement.width).toBeCloseTo(600, 2);
+  expect(placement.height).toBeCloseTo(400, 2);
+  expect(placement.y).toBeCloseTo(212, 2);
+});
+
+test('reserves top header space for page numbering', () => {
+  const placement = getImagePlacement(
+    600,
+    800,
+    1200,
+    800,
+    PAGE_MARGINS.NONE,
+    IMAGE_FITS.CONTAIN,
+    makePageNumbering({
+      enabled: true,
+      placement: PAGE_NUMBER_PLACEMENTS.RESERVED,
+      verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.TOP,
+    }),
+  );
+
+  expect(placement.width).toBeCloseTo(600, 2);
+  expect(placement.height).toBeCloseTo(400, 2);
+  expect(placement.y).toBeCloseTo(188, 2);
+});
+
+test('does not change image placement for page numbering overlay', () => {
+  const placement = getImagePlacement(
+    600,
+    800,
+    1200,
+    800,
+    PAGE_MARGINS.NONE,
+    IMAGE_FITS.CONTAIN,
+    makePageNumbering({
+      enabled: true,
+      placement: PAGE_NUMBER_PLACEMENTS.OVERLAY,
+    }),
+  );
+
+  expect(placement).toEqual(getImagePlacement(600, 800, 1200, 800, PAGE_MARGINS.NONE, IMAGE_FITS.CONTAIN));
+});
+
+test('calculates page number text placement from alignment and vertical position', () => {
+  expect(getPageNumberTextPlacement(600, 800, 10, makePageNumbering({
+    horizontalAlignment: PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.LEFT,
+    verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM,
+  }))).toEqual({ x: PAGE_NUMBER_INSET, y: PAGE_NUMBER_INSET });
+
+  expect(getPageNumberTextPlacement(600, 800, 10, makePageNumbering({
+    horizontalAlignment: PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.CENTER,
+    verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM,
+  }))).toEqual({ x: 295, y: PAGE_NUMBER_INSET });
+
+  expect(getPageNumberTextPlacement(600, 800, 10, makePageNumbering({
+    horizontalAlignment: PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.RIGHT,
+    verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.TOP,
+  }))).toEqual({
+    x: 600 - PAGE_NUMBER_INSET - 10,
+    y: 800 - PAGE_NUMBER_INSET - PAGE_NUMBER_FONT_SIZE,
+  });
+
+  expect(PAGE_NUMBER_RESERVED_HEIGHT).toBe(24);
+});
+
 test('calculates centered cover placement that fills the available area', () => {
   const placement = getImagePlacement(600, 800, 1200, 800, PAGE_MARGINS.NONE, IMAGE_FITS.COVER);
 
@@ -73,3 +184,10 @@ test('keeps placement finite when margin exceeds the page dimensions', () => {
   expect(Number.isFinite(placement.y)).toBe(true);
   expect(Number.isFinite(placement.scaleFactor)).toBe(true);
 });
+
+function makePageNumbering(overrides: Partial<PageNumberingOptions> = {}): PageNumberingOptions {
+  return {
+    ...DEFAULT_PDF_OPTIONS.pageNumbering,
+    ...overrides,
+  };
+}

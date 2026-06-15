@@ -180,6 +180,22 @@ button {
   transform-origin: center;
 }
 
+.page-number-preview {
+  align-items: center;
+  box-sizing: border-box;
+  color: #111;
+  display: flex;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 6px;
+  pointer-events: none;
+  width: 100%;
+}
+
+.page-number-preview--overlay {
+  text-shadow: 0 1px 2px white;
+}
+
 .page-control-button {
   --control-color: rgb(70,70,70);
   align-items: center;
@@ -302,6 +318,13 @@ button {
 .option-row {
   display: flex;
   flex-wrap: wrap;
+}
+
+.option-row-label {
+  color: #555;
+  flex-basis: 100%;
+  font-size: 13px;
+  padding: 10px 0 4px;
 }
 
 .option-choice {

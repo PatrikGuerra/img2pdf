@@ -1,11 +1,21 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { DEFAULT_PDF_OPTIONS, IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from '../constants/pdfOptions';
+import {
+  DEFAULT_PDF_OPTIONS,
+  IMAGE_FITS,
+  PAGE_MARGINS,
+  PAGE_NUMBER_HORIZONTAL_ALIGNMENTS,
+  PAGE_NUMBER_PLACEMENTS,
+  PAGE_NUMBER_VERTICAL_POSITIONS,
+  PAGE_ORIENTATIONS,
+  PAGE_SIZES,
+} from '../constants/pdfOptions';
 import type { ImageItem, PdfOptions, PdfPageSize, RotationDegrees } from '../types/pdf';
 import { createPdfFromImages, fetchImageData } from './createPdfFromImages';
 
 interface MockPage {
   size: PdfPageSize;
   drawImage: ReturnType<typeof vi.fn>;
+  drawText: ReturnType<typeof vi.fn>;
   getHeight: ReturnType<typeof vi.fn>;
   getWidth: ReturnType<typeof vi.fn>;
   setRotation: ReturnType<typeof vi.fn>;
@@ -18,6 +28,7 @@ const pdfMocks = vi.hoisted(() => {
       const page: MockPage = {
         size,
         drawImage: vi.fn(),
+        drawText: vi.fn(),
         getHeight: vi.fn(() => size[1]),
         getWidth: vi.fn(() => size[0]),
         setRotation: vi.fn(),
@@ -25,6 +36,9 @@ const pdfMocks = vi.hoisted(() => {
       pages.push(page);
       return page;
     }),
+    embedFont: vi.fn(async () => ({
+      widthOfTextAtSize: vi.fn((text: string, size: number) => text.length * size / 2),
+    })),
     embedJpg: vi.fn(async () => ({ height: 200, width: 100 })),
     embedPng: vi.fn(async () => ({ height: 100, width: 200 })),
     save: vi.fn(async () => new Uint8Array([9, 8, 7])),
@@ -58,6 +72,10 @@ vi.mock('pdf-lib', () => ({
     Letter: [612, 792],
   },
   degrees: pdfMocks.degrees,
+  rgb: vi.fn((red: number, green: number, blue: number) => ({ blue, green, red })),
+  StandardFonts: {
+    Helvetica: 'Helvetica',
+  },
 }));
 
 vi.mock('exif-js', () => ({
@@ -113,6 +131,90 @@ describe('createPdfFromImages', () => {
     expect(placement.y).toBeCloseTo(0, 2);
   });
 
+  test('does not draw page numbers by default', async () => {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions());
+
+    expect(pdfMocks.pdfDoc.embedFont).not.toHaveBeenCalled();
+    expect(pdfMocks.pages[0].drawText).not.toHaveBeenCalled();
+  });
+
+  test('draws enabled page numbers on every page', async () => {
+    await createPdfFromImages([
+      makeImageItem('one.png', 'image/png'),
+      makeImageItem('two.png', 'image/png'),
+      makeImageItem('three.png', 'image/png'),
+    ], makeOptions({
+      pageNumbering: {
+        ...DEFAULT_PDF_OPTIONS.pageNumbering,
+        enabled: true,
+      },
+    }));
+
+    expect(pdfMocks.pdfDoc.embedFont).toHaveBeenCalledWith('Helvetica');
+    expect(pdfMocks.pages[0].drawText).toHaveBeenCalledWith('1', expect.objectContaining({
+      size: 12,
+      x: expect.closeTo(294.64, 2),
+      y: 12,
+    }));
+    expect(pdfMocks.pages[1].drawText).toHaveBeenCalledWith('2', expect.any(Object));
+    expect(pdfMocks.pages[2].drawText).toHaveBeenCalledWith('3', expect.any(Object));
+  });
+
+  test('draws page numbers at the requested top right position', async () => {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
+      pageNumbering: {
+        ...DEFAULT_PDF_OPTIONS.pageNumbering,
+        enabled: true,
+        horizontalAlignment: PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.RIGHT,
+        placement: PAGE_NUMBER_PLACEMENTS.OVERLAY,
+        verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.TOP,
+      },
+    }));
+
+    expect(pdfMocks.pages[0].drawText).toHaveBeenCalledWith('1', expect.objectContaining({
+      x: expect.closeTo(577.28, 2),
+      y: expect.closeTo(817.89, 2),
+    }));
+  });
+
+  test('reserves footer space before placing the image when page numbering uses header/footer placement', async () => {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
+      pageNumbering: {
+        ...DEFAULT_PDF_OPTIONS.pageNumbering,
+        enabled: true,
+        placement: PAGE_NUMBER_PLACEMENTS.RESERVED,
+        verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM,
+      },
+    }));
+
+    expect(pdfMocks.pages[0].drawImage).toHaveBeenCalledWith(
+      { height: 100, width: 200 },
+      expect.objectContaining({
+        height: expect.closeTo(297.64, 2),
+        width: expect.closeTo(595.28, 2),
+        x: expect.closeTo(0, 2),
+        y: expect.closeTo(284.13, 2),
+      }),
+    );
+  });
+
+  test('does not change image placement when page numbering uses overlay placement', async () => {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
+      pageNumbering: {
+        ...DEFAULT_PDF_OPTIONS.pageNumbering,
+        enabled: true,
+        placement: PAGE_NUMBER_PLACEMENTS.OVERLAY,
+      },
+    }));
+
+    expect(pdfMocks.pages[0].drawImage).toHaveBeenCalledWith(
+      { height: 100, width: 200 },
+      expect.objectContaining({
+        y: expect.closeTo(272.13, 2),
+      }),
+    );
+  });
+
   test('ignores margin and fit for same-as-image pages', async () => {
     await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
       pageSize: PAGE_SIZES.IMAGE,
@@ -128,6 +230,28 @@ describe('createPdfFromImages', () => {
       width: 200,
       height: 100,
     });
+  });
+
+  test('supports reserved page numbering for same-as-image pages without increasing page size', async () => {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
+      pageNumbering: {
+        ...DEFAULT_PDF_OPTIONS.pageNumbering,
+        enabled: true,
+        placement: PAGE_NUMBER_PLACEMENTS.RESERVED,
+        verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM,
+      },
+      pageSize: PAGE_SIZES.IMAGE,
+    }));
+
+    expect(pdfMocks.pdfDoc.addPage).toHaveBeenCalledWith([200, 100]);
+    expect(pdfMocks.pages[0].drawImage).toHaveBeenCalledWith({ height: 100, width: 200 }, {
+      height: 76,
+      scaleFactor: 0.76,
+      width: 152,
+      x: 24,
+      y: 24,
+    });
+    expect(pdfMocks.pages[0].drawText).toHaveBeenCalledWith('1', expect.any(Object));
   });
 
   test('uses each image page orientation for fixed page sizes', async () => {

@@ -4,6 +4,16 @@ export type ImageFit = 'CONTAIN' | 'COVER';
 export type RotationDegrees = 0 | 90 | 180 | 270;
 export type FlipAxis = 'horizontal' | 'vertical';
 export type PdfPageSize = [number, number];
+export type PageNumberVerticalPosition = 'TOP' | 'BOTTOM';
+export type PageNumberHorizontalAlignment = 'LEFT' | 'CENTER' | 'RIGHT';
+export type PageNumberPlacement = 'RESERVED' | 'OVERLAY';
+
+export interface PageNumberingOptions {
+  enabled: boolean;
+  horizontalAlignment: PageNumberHorizontalAlignment;
+  placement: PageNumberPlacement;
+  verticalPosition: PageNumberVerticalPosition;
+}
 
 export interface PdfOptions {
   pageSize: PageSize;
@@ -12,6 +22,7 @@ export interface PdfOptions {
   imageFit: ImageFit;
   compressImages: boolean;
   imageQuality: number;
+  pageNumbering: PageNumberingOptions;
 }
 
 export interface ImageItem {

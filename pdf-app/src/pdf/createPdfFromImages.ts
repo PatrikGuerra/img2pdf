@@ -1,10 +1,10 @@
-import { degrees, PDFDocument } from 'pdf-lib';
-import type { PDFDocument as PdfLibDocument, PDFImage, PDFPage } from 'pdf-lib';
+import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import type { PDFFont, PDFDocument as PdfLibDocument, PDFImage, PDFPage } from 'pdf-lib';
 import EXIF from 'exif-js';
-import { DEFAULT_PDF_OPTIONS, PAGE_SIZES } from '../constants/pdfOptions';
+import { DEFAULT_PDF_OPTIONS, IMAGE_FITS, PAGE_NUMBER_PLACEMENTS, PAGE_SIZES } from '../constants/pdfOptions';
 import { canvasToBlob, loadImage } from '../image/imageFiles';
-import { getImagePlacement, getPageSize } from './pageLayout';
-import type { FetchedImageData, ImageItem, JpegOrientation, PdfOptions, PdfProgress, RotationDegrees } from '../types/pdf';
+import { getImagePlacement, getPageNumberTextPlacement, getPageSize, PAGE_NUMBER_FONT_SIZE } from './pageLayout';
+import type { FetchedImageData, ImageItem, JpegOrientation, PageNumberingOptions, PdfOptions, PdfProgress, RotationDegrees } from '../types/pdf';
 
 interface ImageTransform {
   flipHorizontal?: boolean;
@@ -20,8 +20,15 @@ export async function createPdfFromImages(
   const resolvedOptions = {
     ...DEFAULT_PDF_OPTIONS,
     ...options,
+    pageNumbering: {
+      ...DEFAULT_PDF_OPTIONS.pageNumbering,
+      ...options.pageNumbering,
+    },
   };
   const pdfDoc = await PDFDocument.create();
+  const pageNumberFont = resolvedOptions.pageNumbering.enabled
+    ? await pdfDoc.embedFont(StandardFonts.Helvetica)
+    : undefined;
   const total = images.length;
 
   for (let index = 0; index < total; index += 1) {
@@ -49,12 +56,26 @@ export async function createPdfFromImages(
     const page = pdfDoc.addPage(pageSize);
 
     if (resolvedOptions.pageSize === PAGE_SIZES.IMAGE) {
-      page.drawImage(embeddedImage, {
-        x: 0,
-        y: 0,
-        width: embeddedImage.width,
-        height: embeddedImage.height,
-      });
+      if (usesReservedPageNumbering(resolvedOptions.pageNumbering)) {
+        const placement = getImagePlacement(
+          page.getWidth(),
+          page.getHeight(),
+          embeddedImage.width,
+          embeddedImage.height,
+          0,
+          IMAGE_FITS.CONTAIN,
+          resolvedOptions.pageNumbering,
+        );
+
+        page.drawImage(embeddedImage, placement);
+      } else {
+        page.drawImage(embeddedImage, {
+          x: 0,
+          y: 0,
+          width: embeddedImage.width,
+          height: embeddedImage.height,
+        });
+      }
     } else {
       const placement = getImagePlacement(
         page.getWidth(),
@@ -63,16 +84,43 @@ export async function createPdfFromImages(
         embeddedImage.height,
         resolvedOptions.margin,
         resolvedOptions.imageFit,
+        resolvedOptions.pageNumbering,
       );
 
       page.drawImage(embeddedImage, placement);
     }
 
+    drawPageNumber(page, pageNumberFont, String(index + 1), resolvedOptions.pageNumbering);
     applyJpegOrientation(page, jpegOrientation);
     onProgress?.({ current: index + 1, total, image: imageItem });
   }
 
   return pdfDoc.save();
+}
+
+function drawPageNumber(
+  page: PDFPage,
+  font: PDFFont | undefined,
+  text: string,
+  pageNumbering: PageNumberingOptions,
+): void {
+  if (!pageNumbering.enabled || !font) {
+    return;
+  }
+
+  const textWidth = font.widthOfTextAtSize(text, PAGE_NUMBER_FONT_SIZE);
+  const placement = getPageNumberTextPlacement(page.getWidth(), page.getHeight(), textWidth, pageNumbering);
+
+  page.drawText(text, {
+    ...placement,
+    color: rgb(0, 0, 0),
+    font,
+    size: PAGE_NUMBER_FONT_SIZE,
+  });
+}
+
+function usesReservedPageNumbering(pageNumbering: PageNumberingOptions): boolean {
+  return pageNumbering.enabled && pageNumbering.placement === PAGE_NUMBER_PLACEMENTS.RESERVED;
 }
 
 export async function fetchImageData(

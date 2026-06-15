@@ -1,7 +1,15 @@
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent } from 'react';
-import { IMAGE_FITS, PAGE_ORIENTATION_LABELS, PAGE_ORIENTATIONS, PAGE_SIZES } from '../constants/pdfOptions';
-import { getAspectRatio, getFixedPageSize } from '../pdf/pageLayout';
-import type { FlipAxis, ImageItem, PageOrientation, PdfOptions } from '../types/pdf';
+import {
+  IMAGE_FITS,
+  PAGE_NUMBER_HORIZONTAL_ALIGNMENTS,
+  PAGE_NUMBER_PLACEMENTS,
+  PAGE_NUMBER_VERTICAL_POSITIONS,
+  PAGE_ORIENTATION_LABELS,
+  PAGE_ORIENTATIONS,
+  PAGE_SIZES,
+} from '../constants/pdfOptions';
+import { getAspectRatio, getFixedPageSize, PAGE_NUMBER_RESERVED_HEIGHT } from '../pdf/pageLayout';
+import type { FlipAxis, ImageItem, PageNumberVerticalPosition, PageOrientation, PdfOptions } from '../types/pdf';
 
 interface ImageGridProps {
   images: ImageItem[];
@@ -90,6 +98,7 @@ function ImagePage({
   const pageWrapper = getPageWrapperStyle(options, image.pageOrientation);
   const pageMetaStyle = getPageMetaStyle(options, image.pageOrientation);
   const pageStyle = getPageStyle(options, image.previewUrl, image.pageOrientation);
+  const pageNumberText = String(index + 1);
 
   return (
     <div
@@ -125,10 +134,37 @@ function ImagePage({
         style={pageWrapper}
         tabIndex={0}
       >
+        {shouldShowReservedPageNumber(options, PAGE_NUMBER_VERTICAL_POSITIONS.TOP) ? (
+          <PageNumberPreview
+            label={`Preview page number ${pageNumberText}`}
+            options={options}
+            pageOrientation={image.pageOrientation}
+            text={pageNumberText}
+            variant="reserved"
+          />
+        ) : null}
         <div className="page-image" style={{
           ...pageStyle,
           transform: getImageTransform(image),
         }} />
+        {shouldShowReservedPageNumber(options, PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM) ? (
+          <PageNumberPreview
+            label={`Preview page number ${pageNumberText}`}
+            options={options}
+            pageOrientation={image.pageOrientation}
+            text={pageNumberText}
+            variant="reserved"
+          />
+        ) : null}
+        {shouldShowOverlayPageNumber(options) ? (
+          <PageNumberPreview
+            label={`Preview page number ${pageNumberText}`}
+            options={options}
+            pageOrientation={image.pageOrientation}
+            text={pageNumberText}
+            variant="overlay"
+          />
+        ) : null}
       </div>
       <div className="page-meta" onClick={(event) => event.stopPropagation()} style={pageMetaStyle}>
         <div className="page-number">Page {index + 1}</div>
@@ -258,6 +294,7 @@ function getPageWrapperStyle(options: PdfOptions, pageOrientation: PageOrientati
     width: '192px',
     border: 'none',
     display: 'flex',
+    flexDirection: 'column',
     background: 'white',
     position: 'relative',
   };
@@ -304,6 +341,102 @@ function getPageStyle(options: PdfOptions, previewUrl: string, pageOrientation: 
   };
 
   return style;
+}
+
+interface PageNumberPreviewProps {
+  label: string;
+  options: PdfOptions;
+  pageOrientation: PageOrientation;
+  text: string;
+  variant: 'overlay' | 'reserved';
+}
+
+function PageNumberPreview({
+  label,
+  options,
+  pageOrientation,
+  text,
+  variant,
+}: PageNumberPreviewProps) {
+  return (
+    <div
+      aria-label={label}
+      className={`page-number-preview page-number-preview--${variant}`}
+      style={getPageNumberPreviewStyle(options, pageOrientation, variant)}
+    >
+      {text}
+    </div>
+  );
+}
+
+function shouldShowReservedPageNumber(options: PdfOptions, verticalPosition: PageNumberVerticalPosition): boolean {
+  return Boolean(
+    options.pageNumbering.enabled
+      && options.pageNumbering.placement === PAGE_NUMBER_PLACEMENTS.RESERVED
+      && options.pageNumbering.verticalPosition === verticalPosition,
+  );
+}
+
+function shouldShowOverlayPageNumber(options: PdfOptions): boolean {
+  return Boolean(
+    options.pageNumbering.enabled
+      && options.pageNumbering.placement === PAGE_NUMBER_PLACEMENTS.OVERLAY,
+  );
+}
+
+function getPageNumberPreviewStyle(
+  options: PdfOptions,
+  pageOrientation: PageOrientation,
+  variant: 'overlay' | 'reserved',
+): CSSProperties {
+  const justifyContent = getPreviewJustifyContent(options);
+  const style: CSSProperties = {
+    justifyContent,
+  };
+
+  if (variant === 'reserved') {
+    return {
+      ...style,
+      height: `${getPreviewReservedHeightPixels(options, pageOrientation)}px`,
+    };
+  }
+
+  return {
+    ...style,
+    bottom: options.pageNumbering.verticalPosition === PAGE_NUMBER_VERTICAL_POSITIONS.BOTTOM ? '6px' : undefined,
+    left: '0',
+    position: 'absolute',
+    right: '0',
+    top: options.pageNumbering.verticalPosition === PAGE_NUMBER_VERTICAL_POSITIONS.TOP ? '6px' : undefined,
+  };
+}
+
+function getPreviewJustifyContent(options: PdfOptions): CSSProperties['justifyContent'] {
+  if (options.pageNumbering.horizontalAlignment === PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.LEFT) {
+    return 'flex-start';
+  }
+
+  if (options.pageNumbering.horizontalAlignment === PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.RIGHT) {
+    return 'flex-end';
+  }
+
+  return 'center';
+}
+
+function getPreviewReservedHeightPixels(options: PdfOptions, pageOrientation: PageOrientation): number {
+  if (options.pageSize === PAGE_SIZES.IMAGE) {
+    return 18;
+  }
+
+  const pageSize = getFixedPageSize({
+    ...options,
+    orientation: pageOrientation,
+  });
+  if (!pageSize) {
+    return 18;
+  }
+
+  return Math.max(18, Math.round(PAGE_NUMBER_RESERVED_HEIGHT * 192 / pageSize[1]));
 }
 
 function getPreviewMarginPixels(options: PdfOptions, pageOrientation: PageOrientation): number {

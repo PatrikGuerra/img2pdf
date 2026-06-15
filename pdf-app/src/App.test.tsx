@@ -2,7 +2,15 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, test, vi } from 'vitest';
 import App from './App';
-import { IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from './constants/pdfOptions';
+import {
+  IMAGE_FITS,
+  PAGE_MARGINS,
+  PAGE_NUMBER_HORIZONTAL_ALIGNMENTS,
+  PAGE_NUMBER_PLACEMENTS,
+  PAGE_NUMBER_VERTICAL_POSITIONS,
+  PAGE_ORIENTATIONS,
+  PAGE_SIZES,
+} from './constants/pdfOptions';
 import { downloadPdf } from './download/downloadPdf';
 import { createPdfFromImages } from './pdf/createPdfFromImages';
 import { mmToPdfPoints } from './pdf/pageLayout';
@@ -91,6 +99,12 @@ test('starts with the expected default PDF options', async () => {
   expect(screen.getByText('80%')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Increase image quality' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Decrease image quality' })).toBeDisabled();
+  expect(screen.getByText('Page numbers')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Hide page numbers' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Show page numbers' })).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.getByRole('button', { name: 'Bottom' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Center' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Header/Footer' })).toBeDisabled();
 });
 
 test('keeps fixed-page-only options visible but disabled for same-as-image pages', async () => {
@@ -344,6 +358,46 @@ test('custom page margin accepts decimal millimeter values', async () => {
     }
 
     expect(options.margin).toBeCloseTo(mmToPdfPoints(12.5), 5);
+  });
+});
+
+test('page numbering controls enable preview and pass options to PDF generation', async () => {
+  const user = userEvent.setup();
+  const file = new File(['image'], 'photo.png', { type: 'image/png' });
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), file);
+
+  expect(screen.queryByLabelText('Preview page number 1')).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Show page numbers' }));
+
+  expect(screen.getByLabelText('Preview page number 1')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Bottom' })).not.toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Center' })).not.toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Header/Footer' })).not.toBeDisabled();
+
+  await user.click(screen.getByRole('button', { name: 'Top' }));
+  await user.click(screen.getByRole('button', { name: 'Right' }));
+  await user.click(screen.getByRole('button', { name: 'Overlay' }));
+  await user.click(screen.getByRole('button', { name: /generate pdf/i }));
+
+  await waitFor(() => {
+    const pdfCall = vi.mocked(createPdfFromImages).mock.calls[0];
+    if (!pdfCall) {
+      throw new Error('Expected PDF generation to be called.');
+    }
+
+    const [, options] = pdfCall;
+    expect(options).toEqual(expect.objectContaining({
+      pageNumbering: {
+        enabled: true,
+        horizontalAlignment: PAGE_NUMBER_HORIZONTAL_ALIGNMENTS.RIGHT,
+        placement: PAGE_NUMBER_PLACEMENTS.OVERLAY,
+        verticalPosition: PAGE_NUMBER_VERTICAL_POSITIONS.TOP,
+      },
+    }));
   });
 });
 
