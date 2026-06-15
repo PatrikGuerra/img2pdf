@@ -148,6 +148,10 @@ test('starts with the expected default PDF options', async () => {
 
   await uploadAndContinue(user, file);
 
+  expect(screen.getByRole('heading', { name: 'Page setup' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Image placement' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Page numbers' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Output' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'A4' })).toHaveAttribute('aria-pressed', 'true');
   expect(getOptionButton('Portrait')).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: '0 mm' })).toHaveAttribute('aria-pressed', 'true');
@@ -164,6 +168,23 @@ test('starts with the expected default PDF options', async () => {
   expect(screen.getByRole('button', { name: 'Bottom' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Center' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Header/Footer' })).toBeDisabled();
+});
+
+test('opens the responsive options bottom sheet from the action bar', async () => {
+  const user = userEvent.setup();
+  const file = new File(['image'], 'photo.png', { type: 'image/png' });
+
+  render(<App />);
+
+  await uploadAndContinue(user, file);
+
+  const optionsPanel = screen.getByLabelText('PDF options');
+  expect(optionsPanel).not.toHaveClass('options--visible');
+
+  await user.click(screen.getByRole('button', { name: 'PDF Options' }));
+
+  expect(optionsPanel).toHaveClass('options--visible');
+  expect(screen.getByRole('button', { name: 'Close options' })).toBeInTheDocument();
 });
 
 test('keeps fixed-page-only options visible but disabled for same-as-image pages', async () => {
