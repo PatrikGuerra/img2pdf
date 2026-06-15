@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 
 const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
 const viteConfigSource = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
+const deployPagesWorkflowPath = resolve(process.cwd(), '..', '.github', 'workflows', 'deploy-pages.yml');
 
 describe('project configuration', () => {
   test('uses Vite and Vitest instead of CRA react-scripts', () => {
@@ -37,5 +38,22 @@ describe('project configuration', () => {
 
   test('does not keep the deprecated pdf-app build output directory', () => {
     expect(existsSync(resolve(process.cwd(), 'build'))).toBe(false);
+  });
+
+  test('keeps the GitHub Pages deployment workflow configured', () => {
+    expect(existsSync(deployPagesWorkflowPath)).toBe(true);
+
+    const workflowSource = readFileSync(deployPagesWorkflowPath, 'utf8');
+
+    expect(workflowSource).toContain('branches:');
+    expect(workflowSource).toContain('- main');
+    expect(workflowSource).toContain('working-directory: pdf-app');
+    expect(workflowSource).toContain('run: npm ci');
+    expect(workflowSource).toContain('run: npm test');
+    expect(workflowSource).toContain('run: npm run build');
+    expect(workflowSource).toContain('uses: actions/configure-pages@v5');
+    expect(workflowSource).toContain('uses: actions/upload-pages-artifact@v4');
+    expect(workflowSource).toContain('path: docs');
+    expect(workflowSource).toContain('uses: actions/deploy-pages@v4');
   });
 });
