@@ -540,6 +540,58 @@ test('passes updated options to PDF generation and downloads the result', async 
   });
 });
 
+test('opens the about dialog with original project and third-party credits', async () => {
+  const user = userEvent.setup();
+  const file = new File(['image'], 'photo.png', { type: 'image/png' });
+
+  render(<App />);
+
+  await uploadAndContinue(user, file);
+
+  const aboutButton = screen.getByRole('button', { name: 'About this app' });
+  expect(aboutButton).toHaveAttribute('title', 'About this app');
+  expect(aboutButton.closest('.right-actions')).toBeInTheDocument();
+
+  await user.click(aboutButton);
+
+  const dialog = screen.getByRole('dialog', { name: 'About this app' });
+  const originalProject = within(dialog).getByRole('link', { name: 'subhra74/img2pdf' });
+  expect(originalProject).toHaveAttribute('href', 'https://github.com/subhra74/img2pdf');
+
+  [
+    'React',
+    'React DOM',
+    'pdf-lib',
+    'exif-js',
+    'heic2any',
+    'mobile-drag-drop',
+    'Font Awesome',
+    'Vite',
+    '@vitejs/plugin-react',
+    'TypeScript',
+    'Vitest',
+    'jsdom',
+    '@testing-library/jest-dom',
+    '@testing-library/react',
+    '@testing-library/user-event',
+    '@types/exif-js',
+    '@types/node',
+    '@types/react',
+    '@types/react-dom',
+  ].forEach((creditName) => {
+    expect(within(dialog).getByRole('link', { name: creditName })).toBeInTheDocument();
+  });
+
+  within(dialog).getAllByRole('link').forEach((link) => {
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noreferrer');
+  });
+
+  await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+
+  expect(screen.queryByRole('dialog', { name: 'About this app' })).not.toBeInTheDocument();
+});
+
 test('custom page margin accepts decimal millimeter values', async () => {
   const user = userEvent.setup();
   const file = new File(['image'], 'photo.jpg', { type: 'image/jpeg' });

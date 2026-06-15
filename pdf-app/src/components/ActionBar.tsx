@@ -5,6 +5,7 @@ interface ActionBarProps {
   onAddPage: () => void;
   onChangeFileName: (fileName: string) => void;
   onGeneratePdf: () => void;
+  onShowAbout: () => void;
   onShowOptions: () => void;
 }
 
@@ -15,6 +16,7 @@ export default function ActionBar({
   onAddPage,
   onChangeFileName,
   onGeneratePdf,
+  onShowAbout,
   onShowOptions,
 }: ActionBarProps) {
   return (
@@ -40,6 +42,15 @@ export default function ActionBar({
         </label>
         <button disabled={busy} onClick={onGeneratePdf} className="button" type="button">
           Generate PDF
+        </button>
+        <button
+          aria-label="About this app"
+          className="about-button"
+          onClick={onShowAbout}
+          title="About this app"
+          type="button"
+        >
+          <i aria-hidden="true" className="fa fa-info-circle" />
         </button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import AboutDialog from './components/AboutDialog';
 import ActionBar from './components/ActionBar';
 import BusyOverlay from './components/BusyOverlay';
 import ConfirmationDialog from './components/ConfirmationDialog';
@@ -40,6 +41,7 @@ export default function App() {
   const [options, setOptions] = useState<PdfOptions>(DEFAULT_PDF_OPTIONS);
   const [pdfFileName, setPdfFileName] = useState('file.pdf');
   const [forceShowOptions, setForceShowOptions] = useState(false);
+  const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ id: string; pageNumber: number } | undefined>(undefined);
   const [orientationConfirmation, setOrientationConfirmation] = useState<PageOrientation | undefined>(undefined);
@@ -325,6 +327,7 @@ export default function App() {
         onAddPage={pickFiles}
         onChangeFileName={setPdfFileName}
         onGeneratePdf={generatePdf}
+        onShowAbout={() => setShowAboutDialog(true)}
         onShowOptions={() => setForceShowOptions(true)}
       />
       {fileInputElement}
@@ -363,6 +366,7 @@ export default function App() {
           title="Change all page orientations?"
         />
       ) : null}
+      {showAboutDialog ? <AboutDialog onClose={() => setShowAboutDialog(false)} /> : null}
     </div>
   );
 }
