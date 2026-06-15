@@ -54,6 +54,7 @@ export async function createPdfFromImages(
     };
     const pageSize = getPageSize(imageOptions, embeddedImage, jpegOrientation);
     const page = pdfDoc.addPage(pageSize);
+    drawPageBackground(page, resolvedOptions.pageBackgroundColor);
 
     if (resolvedOptions.pageSize === PAGE_SIZES.IMAGE) {
       if (usesReservedPageNumbering(resolvedOptions.pageNumbering)) {
@@ -121,6 +122,40 @@ function drawPageNumber(
 
 function usesReservedPageNumbering(pageNumbering: PageNumberingOptions): boolean {
   return pageNumbering.enabled && pageNumbering.placement === PAGE_NUMBER_PLACEMENTS.RESERVED;
+}
+
+function drawPageBackground(page: PDFPage, pageBackgroundColor: string | null): void {
+  const normalizedColor = normalizePageBackgroundColor(pageBackgroundColor);
+
+  if (!normalizedColor) {
+    return;
+  }
+
+  const { blue, green, red } = hexToPdfRgb(normalizedColor);
+
+  page.drawRectangle({
+    color: rgb(red, green, blue),
+    height: page.getHeight(),
+    width: page.getWidth(),
+    x: 0,
+    y: 0,
+  });
+}
+
+function normalizePageBackgroundColor(value: string | null | undefined): string | null {
+  if (!value || !/^#[0-9a-fA-F]{6}$/.test(value)) {
+    return null;
+  }
+
+  return value.toLowerCase();
+}
+
+function hexToPdfRgb(value: string): { blue: number; green: number; red: number } {
+  return {
+    blue: Number.parseInt(value.slice(5, 7), 16) / 255,
+    green: Number.parseInt(value.slice(3, 5), 16) / 255,
+    red: Number.parseInt(value.slice(1, 3), 16) / 255,
+  };
 }
 
 export async function fetchImageData(

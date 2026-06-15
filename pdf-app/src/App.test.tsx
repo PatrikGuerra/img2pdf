@@ -156,6 +156,11 @@ test('starts with the expected default PDF options', async () => {
   expect(getOptionButton('Portrait')).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: '0 mm' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('spinbutton', { name: /custom margin/i })).toHaveValue(0);
+  expect(screen.getByText('Page background')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'No background' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Use color' })).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.getByLabelText('Background color')).toBeDisabled();
+  expect(screen.getByLabelText('Background color')).toHaveValue('#ffffff');
   expect(screen.getByRole('button', { name: 'Fit' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: "Don't Compress" })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByText('Image quality')).toBeInTheDocument();
@@ -590,6 +595,57 @@ test('opens the about dialog with original project and third-party credits', asy
   await user.click(within(dialog).getByRole('button', { name: 'Close' }));
 
   expect(screen.queryByRole('dialog', { name: 'About this app' })).not.toBeInTheDocument();
+});
+
+test('page background color updates preview and PDF options', async () => {
+  const user = userEvent.setup();
+  const file = new File(['image'], 'photo.png', { type: 'image/png' });
+
+  render(<App />);
+
+  await uploadAndContinue(user, file);
+
+  const backgroundInput = screen.getByLabelText('Background color');
+  expect(backgroundInput).toBeDisabled();
+
+  await user.click(screen.getByRole('button', { name: 'Use color' }));
+  expect(backgroundInput).not.toBeDisabled();
+  expect(backgroundInput).toHaveValue('#ffffff');
+
+  fireEvent.change(backgroundInput, { target: { value: '#ff0033' } });
+  expect(backgroundInput).toHaveValue('#ff0033');
+  expect(screen.getByRole('button', { name: /select page 1/i })).toHaveStyle({
+    background: 'rgb(255, 0, 51)',
+  });
+  expect(screen.getByRole('button', { name: /select page 1/i }).querySelector('.page-image')).toHaveStyle({
+    backgroundColor: 'rgb(255, 0, 51)',
+  });
+
+  await user.click(screen.getByRole('button', { name: /generate pdf/i }));
+
+  await waitFor(() => {
+    const [, options] = vi.mocked(createPdfFromImages).mock.calls[0];
+    expect(options).toEqual(expect.objectContaining({
+      pageBackgroundColor: '#ff0033',
+    }));
+  });
+
+  await user.click(screen.getByRole('button', { name: 'No background' }));
+  expect(backgroundInput).toBeDisabled();
+  expect(screen.getByRole('button', { name: /select page 1/i })).toHaveStyle({
+    background: 'white',
+  });
+  expect((screen.getByRole('button', { name: /select page 1/i }).querySelector('.page-image') as HTMLElement).style.backgroundColor)
+    .toBe('transparent');
+
+  await user.click(screen.getByRole('button', { name: /generate pdf/i }));
+
+  await waitFor(() => {
+    const [, options] = vi.mocked(createPdfFromImages).mock.calls[1];
+    expect(options).toEqual(expect.objectContaining({
+      pageBackgroundColor: null,
+    }));
+  });
 });
 
 test('custom page margin accepts decimal millimeter values', async () => {

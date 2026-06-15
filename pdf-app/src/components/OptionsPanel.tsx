@@ -208,6 +208,32 @@ export default function OptionsPanel({
               </div>
             </div>
           </OptionSection>
+
+          <OptionSection columns={2} title="Page background">
+            <OptionButton
+              active={options.pageBackgroundColor === null}
+              onClick={() => onChangeOptions({ pageBackgroundColor: null })}
+            >
+              No background
+            </OptionButton>
+            <OptionButton
+              active={options.pageBackgroundColor !== null}
+              onClick={() => onChangeOptions({ pageBackgroundColor: options.pageBackgroundColor ?? '#ffffff' })}
+            >
+              Use color
+            </OptionButton>
+            <div className={`page-background-field${options.pageBackgroundColor ? '' : ' page-background-field--disabled'}`}>
+              <label htmlFor="page-background-color">Background color</label>
+              <input
+                aria-label="Background color"
+                disabled={options.pageBackgroundColor === null}
+                id="page-background-color"
+                onChange={(event) => onChangeOptions({ pageBackgroundColor: event.currentTarget.value })}
+                type="color"
+                value={options.pageBackgroundColor ?? '#ffffff'}
+              />
+            </div>
+          </OptionSection>
         </OptionGroup>
 
         <OptionGroup title="Image placement">

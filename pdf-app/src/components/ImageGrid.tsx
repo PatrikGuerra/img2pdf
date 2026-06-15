@@ -295,7 +295,7 @@ function getPageWrapperStyle(options: PdfOptions, pageOrientation: PageOrientati
     border: 'none',
     display: 'flex',
     flexDirection: 'column',
-    background: 'white',
+    background: options.pageBackgroundColor ?? 'white',
     position: 'relative',
   };
 
@@ -334,6 +334,7 @@ function getPageStyle(options: PdfOptions, previewUrl: string, pageOrientation: 
   const style: CSSProperties = {
     margin: `${previewMargin}px`,
     flex: '1',
+    backgroundColor: options.pageBackgroundColor ?? 'transparent',
     backgroundImage: `url("${previewUrl}")`,
     backgroundSize: options.pageSize !== PAGE_SIZES.IMAGE && options.imageFit === IMAGE_FITS.COVER ? 'cover' : 'contain',
     backgroundRepeat: 'no-repeat',

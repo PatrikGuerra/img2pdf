@@ -15,6 +15,7 @@ import { createPdfFromImages, fetchImageData } from './createPdfFromImages';
 interface MockPage {
   size: PdfPageSize;
   drawImage: ReturnType<typeof vi.fn>;
+  drawRectangle: ReturnType<typeof vi.fn>;
   drawText: ReturnType<typeof vi.fn>;
   getHeight: ReturnType<typeof vi.fn>;
   getWidth: ReturnType<typeof vi.fn>;
@@ -28,6 +29,7 @@ const pdfMocks = vi.hoisted(() => {
       const page: MockPage = {
         size,
         drawImage: vi.fn(),
+        drawRectangle: vi.fn(),
         drawText: vi.fn(),
         getHeight: vi.fn(() => size[1]),
         getWidth: vi.fn(() => size[0]),
@@ -136,6 +138,47 @@ describe('createPdfFromImages', () => {
 
     expect(pdfMocks.pdfDoc.embedFont).not.toHaveBeenCalled();
     expect(pdfMocks.pages[0].drawText).not.toHaveBeenCalled();
+  });
+
+  test('does not draw a page background by default', async () => {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions());
+
+    expect(pdfMocks.pages[0].drawRectangle).not.toHaveBeenCalled();
+  });
+
+  test('draws a white page background before the image when requested', async () => {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
+      pageBackgroundColor: '#ffffff',
+    }));
+
+    expect(pdfMocks.pages[0].drawRectangle).toHaveBeenCalledWith({
+      color: { blue: 1, green: 1, red: 1 },
+      height: 841.89,
+      width: 595.28,
+      x: 0,
+      y: 0,
+    });
+    expect(pdfMocks.pages[0].drawRectangle.mock.invocationCallOrder[0])
+      .toBeLessThan(pdfMocks.pages[0].drawImage.mock.invocationCallOrder[0]);
+  });
+
+  test('normalizes custom page background color to PDF rgb values', async () => {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
+      pageBackgroundColor: '#ff0033',
+    }));
+
+    expect(pdfMocks.pages[0].drawRectangle).toHaveBeenCalledWith(expect.objectContaining({
+      color: { blue: 0.2, green: 0, red: 1 },
+    }));
+  });
+
+  test('ignores invalid page background color values', async () => {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
+      pageBackgroundColor: 'purple',
+    }));
+
+    expect(pdfMocks.pages[0].drawRectangle).not.toHaveBeenCalled();
+    expect(pdfMocks.pages[0].drawImage).toHaveBeenCalled();
   });
 
   test('draws enabled page numbers on every page', async () => {

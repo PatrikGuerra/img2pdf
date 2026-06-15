@@ -347,7 +347,7 @@ button {
 }
 
 .page-image {
-  background-color: #f5f6f8;
+  background-color: transparent;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
   min-height: 0;
   transform-origin: center;
@@ -513,7 +513,8 @@ button {
 .plain-button:focus-visible,
 .option-choice:focus-visible,
 .quality-controls button:focus-visible,
-.custom-margin-input input:focus-visible {
+.custom-margin-input input:focus-visible,
+.page-background-field input:focus-visible {
   outline: 3px solid rgba(51,138,255,0.36);
   outline-offset: 2px;
 }
@@ -670,6 +671,43 @@ button {
   font-size: 12px;
   font-weight: 700;
   padding-right: 10px;
+}
+
+.page-background-field {
+  align-items: center;
+  background: #f4f6fa;
+  border: 1px solid #dfe3ec;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  grid-column: 1 / -1;
+  justify-content: space-between;
+  margin-top: 2px;
+  min-height: 44px;
+  padding: 0 10px;
+}
+
+.page-background-field label {
+  color: #555f70;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.page-background-field input {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  height: 34px;
+  padding: 0;
+  width: 52px;
+}
+
+.page-background-field input:disabled {
+  cursor: default;
+}
+
+.page-background-field--disabled {
+  opacity: 0.58;
 }
 
 .image-quality-row {
@@ -1025,6 +1063,17 @@ button {
 
   .custom-margin-field label {
     white-space: normal;
+  }
+
+  .page-background-field {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .page-background-field input {
+    width: 100%;
   }
 
   .image-quality-row {
