@@ -23,12 +23,14 @@ interface OptionsPanelProps {
 
 interface OptionSectionProps {
   children: ReactNode;
+  disabled?: boolean;
   title: string;
 }
 
 interface OptionButtonProps {
   active: boolean;
   children: ReactNode;
+  disabled?: boolean;
   onClick: () => void;
 }
 
@@ -41,6 +43,7 @@ export default function OptionsPanel({
 }: OptionsPanelProps) {
   const [marginInputFocused, setMarginInputFocused] = useState(false);
   const [marginInputValue, setMarginInputValue] = useState(() => formatMarginInputValue(options.margin));
+  const fixedPageOptionsEnabled = options.pageSize !== PAGE_SIZES.IMAGE;
 
   useEffect(() => {
     if (!marginInputFocused) {
@@ -134,68 +137,71 @@ export default function OptionsPanel({
         </OptionButton>
       </OptionSection>
 
-      {options.pageSize !== PAGE_SIZES.IMAGE ? (
-        <OptionSection title="Page margin">
-          <OptionButton
-            active={isSameMargin(options.margin, PAGE_MARGINS.NONE)}
-            onClick={() => updateMargin(PAGE_MARGINS.NONE)}
-          >
-            {PAGE_MARGIN_LABELS[PAGE_MARGINS.NONE]}
-          </OptionButton>
-          <OptionButton
-            active={isSameMargin(options.margin, PAGE_MARGINS.MM_5)}
-            onClick={() => updateMargin(PAGE_MARGINS.MM_5)}
-          >
-            {PAGE_MARGIN_LABELS[PAGE_MARGINS.MM_5]}
-          </OptionButton>
-          <OptionButton
-            active={isSameMargin(options.margin, PAGE_MARGINS.MM_10)}
-            onClick={() => updateMargin(PAGE_MARGINS.MM_10)}
-          >
-            {PAGE_MARGIN_LABELS[PAGE_MARGINS.MM_10]}
-          </OptionButton>
-          <OptionButton
-            active={isSameMargin(options.margin, PAGE_MARGINS.MM_20)}
-            onClick={() => updateMargin(PAGE_MARGINS.MM_20)}
-          >
-            {PAGE_MARGIN_LABELS[PAGE_MARGINS.MM_20]}
-          </OptionButton>
-          <div className="custom-margin-field">
-            <label htmlFor="custom-margin">Custom margin</label>
-            <div className="custom-margin-input">
-              <input
-                id="custom-margin"
-                inputMode="decimal"
-                min="0"
-                onBlur={commitCustomMargin}
-                onChange={changeCustomMargin}
-                onFocus={() => setMarginInputFocused(true)}
-                step="0.1"
-                type="number"
-                value={marginInputValue}
-              />
-              <span>mm</span>
-            </div>
+      <OptionSection disabled={!fixedPageOptionsEnabled} title="Page margin">
+        <OptionButton
+          active={isSameMargin(options.margin, PAGE_MARGINS.NONE)}
+          disabled={!fixedPageOptionsEnabled}
+          onClick={() => updateMargin(PAGE_MARGINS.NONE)}
+        >
+          {PAGE_MARGIN_LABELS[PAGE_MARGINS.NONE]}
+        </OptionButton>
+        <OptionButton
+          active={isSameMargin(options.margin, PAGE_MARGINS.MM_5)}
+          disabled={!fixedPageOptionsEnabled}
+          onClick={() => updateMargin(PAGE_MARGINS.MM_5)}
+        >
+          {PAGE_MARGIN_LABELS[PAGE_MARGINS.MM_5]}
+        </OptionButton>
+        <OptionButton
+          active={isSameMargin(options.margin, PAGE_MARGINS.MM_10)}
+          disabled={!fixedPageOptionsEnabled}
+          onClick={() => updateMargin(PAGE_MARGINS.MM_10)}
+        >
+          {PAGE_MARGIN_LABELS[PAGE_MARGINS.MM_10]}
+        </OptionButton>
+        <OptionButton
+          active={isSameMargin(options.margin, PAGE_MARGINS.MM_20)}
+          disabled={!fixedPageOptionsEnabled}
+          onClick={() => updateMargin(PAGE_MARGINS.MM_20)}
+        >
+          {PAGE_MARGIN_LABELS[PAGE_MARGINS.MM_20]}
+        </OptionButton>
+        <div className={`custom-margin-field${fixedPageOptionsEnabled ? '' : ' custom-margin-field--disabled'}`}>
+          <label htmlFor="custom-margin">Custom margin</label>
+          <div className="custom-margin-input">
+            <input
+              disabled={!fixedPageOptionsEnabled}
+              id="custom-margin"
+              inputMode="decimal"
+              min="0"
+              onBlur={commitCustomMargin}
+              onChange={changeCustomMargin}
+              onFocus={() => setMarginInputFocused(true)}
+              step="0.1"
+              type="number"
+              value={marginInputValue}
+            />
+            <span>mm</span>
           </div>
-        </OptionSection>
-      ) : null}
+        </div>
+      </OptionSection>
 
-      {options.pageSize !== PAGE_SIZES.IMAGE ? (
-        <OptionSection title="Image fit">
-          <OptionButton
-            active={options.imageFit === IMAGE_FITS.CONTAIN}
-            onClick={() => onChangeOptions({ imageFit: IMAGE_FITS.CONTAIN })}
-          >
-            {IMAGE_FIT_LABELS[IMAGE_FITS.CONTAIN]}
-          </OptionButton>
-          <OptionButton
-            active={options.imageFit === IMAGE_FITS.COVER}
-            onClick={() => onChangeOptions({ imageFit: IMAGE_FITS.COVER })}
-          >
-            {IMAGE_FIT_LABELS[IMAGE_FITS.COVER]}
-          </OptionButton>
-        </OptionSection>
-      ) : null}
+      <OptionSection disabled={!fixedPageOptionsEnabled} title="Image fit">
+        <OptionButton
+          active={options.imageFit === IMAGE_FITS.CONTAIN}
+          disabled={!fixedPageOptionsEnabled}
+          onClick={() => onChangeOptions({ imageFit: IMAGE_FITS.CONTAIN })}
+        >
+          {IMAGE_FIT_LABELS[IMAGE_FITS.CONTAIN]}
+        </OptionButton>
+        <OptionButton
+          active={options.imageFit === IMAGE_FITS.COVER}
+          disabled={!fixedPageOptionsEnabled}
+          onClick={() => onChangeOptions({ imageFit: IMAGE_FITS.COVER })}
+        >
+          {IMAGE_FIT_LABELS[IMAGE_FITS.COVER]}
+        </OptionButton>
+      </OptionSection>
 
       <OptionSection title="Compression">
         <OptionButton
@@ -241,20 +247,21 @@ export default function OptionsPanel({
   );
 }
 
-function OptionSection({ children, title }: OptionSectionProps) {
+function OptionSection({ children, disabled = false, title }: OptionSectionProps) {
   return (
-    <div>
+    <div className={disabled ? 'option-section option-section--disabled' : 'option-section'}>
       <div className="option-section-title">{title}</div>
       <div className="option-row">{children}</div>
     </div>
   );
 }
 
-function OptionButton({ active, children, onClick }: OptionButtonProps) {
+function OptionButton({ active, children, disabled = false, onClick }: OptionButtonProps) {
   return (
     <button
       aria-pressed={active}
       className={`option-choice${active ? ' option-choice--active' : ''}`}
+      disabled={disabled}
       onClick={onClick}
       type="button"
     >

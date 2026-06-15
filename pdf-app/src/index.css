@@ -276,6 +276,15 @@ button {
   color: white;
 }
 
+.option-section--disabled .option-section-title {
+  color: #777;
+}
+
+.option-choice:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .custom-margin-field {
   align-items: center;
   display: flex;
@@ -288,6 +297,10 @@ button {
   color: #555;
   font-size: 13px;
   white-space: nowrap;
+}
+
+.custom-margin-field--disabled {
+  opacity: 0.55;
 }
 
 .custom-margin-input {
@@ -306,6 +319,10 @@ button {
   min-height: 44px;
   min-width: 0;
   padding: 0 10px;
+}
+
+.custom-margin-input input:disabled {
+  cursor: default;
 }
 
 .custom-margin-input span {

@@ -64,6 +64,33 @@ test('starts with the expected default PDF options', async () => {
   expect(screen.getByRole('button', { name: 'Decrease image quality' })).toBeDisabled();
 });
 
+test('keeps fixed-page-only options visible but disabled for same-as-image pages', async () => {
+  const user = userEvent.setup();
+  const file = new File(['image'], 'photo.png', { type: 'image/png' });
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), file);
+  await user.click(screen.getByRole('button', { name: 'Same as Image' }));
+
+  expect(screen.getByText('Page margin')).toBeInTheDocument();
+  expect(screen.getByText('Image fit')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '0 mm' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '5 mm' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '10 mm' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '20 mm' })).toBeDisabled();
+  expect(screen.getByRole('spinbutton', { name: /custom margin/i })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Fit' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Cover' })).toBeDisabled();
+
+  await user.click(screen.getByRole('button', { name: 'A4' }));
+
+  expect(screen.getByRole('button', { name: '0 mm' })).not.toBeDisabled();
+  expect(screen.getByRole('spinbutton', { name: /custom margin/i })).not.toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Fit' })).not.toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Cover' })).not.toBeDisabled();
+});
+
 test('shows an alert for ignored files and keeps only supported images', async () => {
   const image = new File(['image'], 'photo.png', { type: 'image/png' });
   const text = new File(['text'], 'notes.txt', { type: 'text/plain' });
