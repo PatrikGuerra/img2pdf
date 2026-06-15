@@ -4,6 +4,8 @@ Client-side web app for converting JPEG, PNG, HEIC, and HEIF images into a PDF w
 
 Files are processed entirely on your device. The app is designed for privacy-sensitive image-to-PDF workflows and is published as a static GitHub Pages site.
 
+Live app: https://patrikguerra.github.io/img2pdf/
+
 ## Features
 
 - Convert JPEG and PNG images directly to PDF.

@@ -37,6 +37,11 @@ beforeEach(() => {
 test('renders the initial landing view', () => {
   render(<App />);
 
+  expect(screen.getByText('CONVERT IMAGE TO PDF')).toBeInTheDocument();
+  const repositoryLink = screen.getByRole('link', { name: 'Open PatrikGuerra/img2pdf on GitHub' });
+  expect(repositoryLink).toHaveAttribute('href', 'https://github.com/PatrikGuerra/img2pdf');
+  expect(repositoryLink).toHaveAttribute('target', '_blank');
+  expect(repositoryLink).toHaveAttribute('rel', 'noreferrer');
   expect(screen.getByText(/Convert JPEG, PNG, HEIC, or HEIF images to PDF/i)).toBeInTheDocument();
   expect(screen.getByTestId('file-input')).toHaveAttribute(
     'accept',

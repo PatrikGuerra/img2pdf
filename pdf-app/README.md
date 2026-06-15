@@ -4,6 +4,8 @@ React + TypeScript + Vite app for converting local JPEG, PNG, HEIC, and HEIF fil
 
 The app is client-only: selected files are processed on the user's device and are not uploaded to a server.
 
+Live app: https://patrikguerra.github.io/img2pdf/
+
 ## Functionality
 
 - Local JPEG/PNG to PDF generation with `pdf-lib`.

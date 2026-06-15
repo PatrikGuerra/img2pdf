@@ -273,6 +273,17 @@ export default function App() {
   const pageHeader = (
     <div className="page-header">
       <span>CONVERT IMAGE TO PDF</span>
+      <a
+        aria-label="Open PatrikGuerra/img2pdf on GitHub"
+        className="header-repo-link"
+        href="https://github.com/PatrikGuerra/img2pdf"
+        rel="noreferrer"
+        target="_blank"
+        title="Open GitHub repository"
+      >
+        <i aria-hidden="true" className="fa fa-github" />
+        <span>GitHub</span>
+      </a>
     </div>
   );
 
