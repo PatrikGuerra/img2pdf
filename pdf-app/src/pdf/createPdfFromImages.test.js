@@ -1,0 +1,293 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from '../constants/pdfOptions';
+import { createPdfFromImages, fetchImageData } from './createPdfFromImages';
+
+const pdfMocks = vi.hoisted(() => {
+  const pages = [];
+  const pdfDoc = {
+    addPage: vi.fn((size) => {
+      const page = {
+        size,
+        drawImage: vi.fn(),
+        getHeight: vi.fn(() => size[1]),
+        getWidth: vi.fn(() => size[0]),
+        setRotation: vi.fn(),
+      };
+      pages.push(page);
+      return page;
+    }),
+    embedJpg: vi.fn(async () => ({ height: 200, width: 100 })),
+    embedPng: vi.fn(async () => ({ height: 100, width: 200 })),
+    save: vi.fn(async () => new Uint8Array([9, 8, 7])),
+  };
+
+  return {
+    createPdfDoc: vi.fn(async () => pdfDoc),
+    degrees: vi.fn((value) => ({ degrees: value })),
+    pages,
+    pdfDoc,
+  };
+});
+
+const exifMock = vi.hoisted(() => ({
+  readFromBinaryFile: vi.fn(() => ({})),
+}));
+
+const imageMock = vi.hoisted(() => ({
+  canvasToBlob: vi.fn(async () => ({
+    arrayBuffer: vi.fn(async () => new ArrayBuffer(3)),
+  })),
+  loadImage: vi.fn(async () => ({ height: 240, width: 320 })),
+}));
+
+vi.mock('pdf-lib', () => ({
+  PDFDocument: {
+    create: pdfMocks.createPdfDoc,
+  },
+  PageSizes: {
+    A4: [595.28, 841.89],
+    Letter: [612, 792],
+  },
+  degrees: pdfMocks.degrees,
+}));
+
+vi.mock('exif-js', () => ({
+  default: exifMock,
+}));
+
+vi.mock('../image/imageFiles', () => imageMock);
+
+describe('createPdfFromImages', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    pdfMocks.pages.length = 0;
+    globalThis.fetch = vi.fn(async () => createFetchResponse('image/png'));
+  });
+
+  test('calls progress once per processed image and saves the PDF', async () => {
+    const onProgress = vi.fn();
+    const images = [
+      { file: new File(['one'], 'one.png', { type: 'image/png' }), previewUrl: 'blob:one' },
+      { file: new File(['two'], 'two.png', { type: 'image/png' }), previewUrl: 'blob:two' },
+    ];
+
+    const bytes = await createPdfFromImages(images, {
+      pageSize: PAGE_SIZES.A4,
+      orientation: PAGE_ORIENTATIONS.PORTRAIT,
+      margin: PAGE_MARGINS.NONE,
+      compressImages: false,
+      imageQuality: 80,
+    }, onProgress);
+
+    expect(bytes).toEqual(new Uint8Array([9, 8, 7]));
+    expect(onProgress).toHaveBeenCalledTimes(2);
+    expect(onProgress).toHaveBeenNthCalledWith(1, { current: 1, total: 2, image: images[0] });
+    expect(onProgress).toHaveBeenNthCalledWith(2, { current: 2, total: 2, image: images[1] });
+    expect(pdfMocks.pdfDoc.save).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses contain placement by default', async () => {
+    await createPdfFromImages([
+      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
+    ], {
+      pageSize: PAGE_SIZES.A4,
+      orientation: PAGE_ORIENTATIONS.PORTRAIT,
+      margin: PAGE_MARGINS.NONE,
+      compressImages: false,
+      imageQuality: 80,
+    });
+
+    expect(pdfMocks.pages[0].drawImage).toHaveBeenCalledWith(
+      { height: 100, width: 200 },
+      expect.objectContaining({
+        height: expect.closeTo(297.64, 2),
+        width: expect.closeTo(595.28, 2),
+        x: expect.closeTo(0, 2),
+        y: expect.closeTo(272.13, 2),
+      }),
+    );
+  });
+
+  test('uses cover placement when requested', async () => {
+    await createPdfFromImages([
+      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
+    ], {
+      pageSize: PAGE_SIZES.A4,
+      orientation: PAGE_ORIENTATIONS.PORTRAIT,
+      margin: PAGE_MARGINS.NONE,
+      imageFit: IMAGE_FITS.COVER,
+      compressImages: false,
+      imageQuality: 80,
+    });
+
+    const placement = pdfMocks.pages[0].drawImage.mock.calls[0][1];
+
+    expect(placement.width).toBeGreaterThan(595.28);
+    expect(placement.height).toBeCloseTo(841.89, 2);
+    expect(placement.x).toBeLessThan(0);
+    expect(placement.y).toBeCloseTo(0, 2);
+  });
+
+  test('ignores margin and fit for same-as-image pages', async () => {
+    await createPdfFromImages([
+      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
+    ], {
+      pageSize: PAGE_SIZES.IMAGE,
+      orientation: PAGE_ORIENTATIONS.LANDSCAPE,
+      margin: PAGE_MARGINS.MM_20,
+      imageFit: IMAGE_FITS.COVER,
+      compressImages: false,
+      imageQuality: 80,
+    });
+
+    expect(pdfMocks.pdfDoc.addPage).toHaveBeenCalledWith([200, 100]);
+    expect(pdfMocks.pages[0].drawImage).toHaveBeenCalledWith({ height: 100, width: 200 }, {
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+    });
+  });
+
+  test('preserves PNG and JPEG embedding when compression is disabled', async () => {
+    await createPdfFromImages([
+      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
+    ]);
+
+    expect(pdfMocks.pdfDoc.embedPng).toHaveBeenCalledTimes(1);
+    expect(pdfMocks.pdfDoc.embedJpg).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    pdfMocks.pages.length = 0;
+    globalThis.fetch = vi.fn(async () => createFetchResponse('image/jpeg'));
+
+    await createPdfFromImages([
+      { file: new File(['jpg'], 'image.jpg', { type: 'image/jpeg' }), previewUrl: 'blob:jpg' },
+    ]);
+
+    expect(pdfMocks.pdfDoc.embedJpg).toHaveBeenCalledTimes(1);
+    expect(pdfMocks.pdfDoc.embedPng).not.toHaveBeenCalled();
+  });
+
+  test('uses JPEG compression quality from percentage options', async () => {
+    const drawImage = vi.fn();
+    const canvas = {
+      getContext: vi.fn(() => ({ drawImage })),
+      height: 0,
+      width: 0,
+    };
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValue(canvas);
+
+    await createPdfFromImages([
+      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
+    ], {
+      pageSize: PAGE_SIZES.A4,
+      orientation: PAGE_ORIENTATIONS.PORTRAIT,
+      margin: PAGE_MARGINS.NONE,
+      imageFit: IMAGE_FITS.CONTAIN,
+      compressImages: true,
+      imageQuality: 80,
+    });
+
+    expect(imageMock.canvasToBlob).toHaveBeenCalledWith(expect.any(Object), 0.8);
+    expect(pdfMocks.pdfDoc.embedJpg).toHaveBeenCalledTimes(1);
+
+    createElement.mockRestore();
+  });
+
+  test('throws a clear error for unsupported MIME types', async () => {
+    globalThis.fetch = vi.fn(async () => createFetchResponse('image/gif'));
+
+    await expect(createPdfFromImages([
+      { file: new File(['gif'], 'image.gif', { type: 'image/gif' }), previewUrl: 'blob:gif' },
+    ])).rejects.toThrow('Unsupported image type: image/gif');
+  });
+
+  test.each([
+    [3, 180],
+    [6, 90],
+    [8, 270],
+  ])('applies EXIF orientation %i as a %i degree page rotation', async (orientation, expectedDegrees) => {
+    globalThis.fetch = vi.fn(async () => createFetchResponse('image/jpeg'));
+    exifMock.readFromBinaryFile.mockReturnValue({ Orientation: orientation });
+
+    await createPdfFromImages([
+      { file: new File(['jpg'], 'image.jpg', { type: 'image/jpeg' }), previewUrl: 'blob:jpg' },
+    ], {
+      pageSize: PAGE_SIZES.A4,
+      orientation: PAGE_ORIENTATIONS.PORTRAIT,
+      margin: PAGE_MARGINS.NONE,
+      compressImages: false,
+      imageQuality: 80,
+    });
+
+    expect(pdfMocks.degrees).toHaveBeenCalledWith(expectedDegrees);
+    expect(pdfMocks.pages[0].setRotation).toHaveBeenCalledWith({ degrees: expectedDegrees });
+  });
+
+  test('falls back to normal orientation when EXIF parsing fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    globalThis.fetch = vi.fn(async () => createFetchResponse('image/jpeg'));
+    exifMock.readFromBinaryFile.mockImplementation(() => {
+      throw new Error('bad exif');
+    });
+
+    await createPdfFromImages([
+      { file: new File(['jpg'], 'image.jpg', { type: 'image/jpeg' }), previewUrl: 'blob:jpg' },
+    ]);
+
+    expect(pdfMocks.pages[0].setRotation).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalled();
+
+    consoleError.mockRestore();
+  });
+});
+
+describe('fetchImageData', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    globalThis.fetch = vi.fn();
+  });
+
+  test('uses fetch directly when compression is disabled', async () => {
+    globalThis.fetch = vi.fn(async () => createFetchResponse('image/png'));
+
+    const imageData = await fetchImageData('blob:image');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith('blob:image');
+    expect(imageData.mime).toBe('image/png');
+    expect(imageData.arrayBuffer).toBeInstanceOf(ArrayBuffer);
+    expect(imageMock.loadImage).not.toHaveBeenCalled();
+  });
+
+  test('uses canvas and JPEG quality when compression is enabled', async () => {
+    const drawImage = vi.fn();
+    const canvas = {
+      getContext: vi.fn(() => ({ drawImage })),
+      height: 0,
+      width: 0,
+    };
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValue(canvas);
+
+    const imageData = await fetchImageData('blob:image', 0.8);
+
+    expect(imageMock.loadImage).toHaveBeenCalledWith('blob:image');
+    expect(canvas.width).toBe(320);
+    expect(canvas.height).toBe(240);
+    expect(drawImage).toHaveBeenCalledWith({ height: 240, width: 320 }, 0, 0, 320, 240);
+    expect(imageMock.canvasToBlob).toHaveBeenCalledWith(canvas, 0.8);
+    expect(imageData.mime).toBe('image/jpeg');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+
+    createElement.mockRestore();
+  });
+});
+
+function createFetchResponse(mime) {
+  return {
+    arrayBuffer: vi.fn(async () => new ArrayBuffer(4)),
+    headers: {
+      get: vi.fn(() => mime),
+    },
+  };
+}
