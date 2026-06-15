@@ -58,6 +58,10 @@ test('starts with the expected default PDF options', async () => {
   expect(screen.getByRole('spinbutton', { name: /custom margin/i })).toHaveValue(0);
   expect(screen.getByRole('button', { name: 'Fit' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: "Don't Compress" })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByText('Image quality')).toBeInTheDocument();
+  expect(screen.getByText('80%')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Increase image quality' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Decrease image quality' })).toBeDisabled();
 });
 
 test('shows an alert for ignored files and keeps only supported images', async () => {
@@ -226,6 +230,8 @@ test('passes updated options to PDF generation and downloads the result', async 
   await user.click(screen.getByRole('button', { name: 'Cover' }));
   await user.click(screen.getByRole('button', { name: 'Compress Images' }));
   expect(screen.getByText('80%')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Increase image quality' })).not.toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Decrease image quality' })).not.toBeDisabled();
   await user.click(screen.getByRole('button', { name: 'Increase image quality' }));
   expect(screen.getByText('90%')).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: /generate pdf/i }));

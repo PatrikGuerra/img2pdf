@@ -212,31 +212,31 @@ export default function OptionsPanel({
         </OptionButton>
       </OptionSection>
 
-      {options.compressImages ? (
-        <>
-          <div className="image-quality-row">
-            <div className="quality-label">Image quality</div>
-            <div className="quality-controls">
-              <button
-                aria-label="Increase image quality"
-                onClick={() => onChangeOptions({ imageQuality: Math.min(100, options.imageQuality + 10) })}
-                type="button"
-              >
-                +
-              </button>
-              <div>{options.imageQuality}%</div>
-              <button
-                aria-label="Decrease image quality"
-                onClick={() => onChangeOptions({ imageQuality: Math.max(10, options.imageQuality - 10) })}
-                type="button"
-              >
-                -
-              </button>
-            </div>
-          </div>
-          <div className="compression-note">Compression can reduce file size and image quality.</div>
-        </>
-      ) : null}
+      <div className={`image-quality-row${options.compressImages ? '' : ' image-quality-row--disabled'}`}>
+        <div className="quality-label">Image quality</div>
+        <div className="quality-controls">
+          <button
+            aria-label="Increase image quality"
+            disabled={!options.compressImages}
+            onClick={() => onChangeOptions({ imageQuality: Math.min(100, options.imageQuality + 10) })}
+            type="button"
+          >
+            +
+          </button>
+          <div>{options.imageQuality}%</div>
+          <button
+            aria-label="Decrease image quality"
+            disabled={!options.compressImages}
+            onClick={() => onChangeOptions({ imageQuality: Math.max(10, options.imageQuality - 10) })}
+            type="button"
+          >
+            -
+          </button>
+        </div>
+      </div>
+      <div className={`compression-note${options.compressImages ? '' : ' compression-note--disabled'}`}>
+        Compression can reduce file size and image quality.
+      </div>
     </div>
   );
 }
