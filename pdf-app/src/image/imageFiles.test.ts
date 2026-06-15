@@ -4,8 +4,10 @@ import {
   createImageItems,
   deleteImageById,
   isSupportedImageFile,
+  moveImageByOffset,
   moveImageBefore,
   revokeImageItems,
+  rotateImageById,
   selectImageById,
 } from './imageFiles';
 import type { ImageItem } from '../types/pdf';
@@ -28,6 +30,7 @@ test('creates image items only for supported files', () => {
     expect.objectContaining({
       file: image,
       previewUrl: 'blob:image.png',
+      rotationDegrees: 0,
       selected: false,
     }),
   ]);
@@ -73,6 +76,32 @@ test('moves a dropped image before the target image', () => {
   expect(moveImageBefore(images, 'c', 'a')).toHaveLength(3);
 });
 
+test('moves images by offset for page controls', () => {
+  const images = [makeImageItem('a'), makeImageItem('b'), makeImageItem('c')];
+
+  expect(moveImageByOffset(images, 'b', -1)).toEqual([makeImageItem('b'), makeImageItem('a'), makeImageItem('c')]);
+  expect(moveImageByOffset(images, 'b', 1)).toEqual([makeImageItem('a'), makeImageItem('c'), makeImageItem('b')]);
+  expect(moveImageByOffset(images, 'a', -1)).toBe(images);
+  expect(moveImageByOffset(images, 'c', 1)).toBe(images);
+  expect(moveImageByOffset(images, 'missing', 1)).toBe(images);
+  expect(moveImageByOffset(images, 'b', 0)).toBe(images);
+});
+
+test('rotates an image clockwise in 90 degree steps', () => {
+  const images = [makeImageItem('a')];
+
+  const rotated90 = rotateImageById(images, 'a');
+  const rotated180 = rotateImageById(rotated90, 'a');
+  const rotated270 = rotateImageById(rotated180, 'a');
+  const rotated0 = rotateImageById(rotated270, 'a');
+
+  expect(rotated90[0].rotationDegrees).toBe(90);
+  expect(rotated180[0].rotationDegrees).toBe(180);
+  expect(rotated270[0].rotationDegrees).toBe(270);
+  expect(rotated0[0].rotationDegrees).toBe(0);
+  expect(rotateImageById(images, 'missing')).toEqual(images);
+});
+
 test('deletes the selected image by id', () => {
   const images = [makeImageItem('a'), makeImageItem('b'), makeImageItem('c')];
 
@@ -84,6 +113,7 @@ function makeImageItem(id: string, selected = false): ImageItem {
     id,
     file: new File([id], `${id}.png`, { type: 'image/png' }),
     previewUrl: `blob:${id}`,
+    rotationDegrees: 0,
     selected,
   };
 }

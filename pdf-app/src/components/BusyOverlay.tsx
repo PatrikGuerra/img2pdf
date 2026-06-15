@@ -11,9 +11,9 @@ export default function BusyOverlay({ busy, progress }: BusyOverlayProps) {
     return null;
   }
 
-  const text = progress?.total
-    ? `Generating PDF (${progress.current}/${progress.total}), Please wait...`
-    : 'Generating PDF, Please wait...';
+  const text = progress?.current && progress.total
+    ? `Processing ${progress.current} of ${progress.total}`
+    : 'Preparing PDF...';
 
-  return <div className="busy">{text}</div>;
+  return <div aria-live="polite" className="busy">{text}</div>;
 }

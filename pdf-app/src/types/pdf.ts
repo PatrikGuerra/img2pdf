@@ -1,6 +1,7 @@
 export type PageSize = 'A4' | 'LETTER' | 'OFICIO' | 'IMAGE';
 export type PageOrientation = 'PORTRAIT' | 'LANDSCAPE';
 export type ImageFit = 'CONTAIN' | 'COVER';
+export type RotationDegrees = 0 | 90 | 180 | 270;
 export type PdfPageSize = [number, number];
 
 export interface PdfOptions {
@@ -16,6 +17,7 @@ export interface ImageItem {
   id: string;
   file: File;
   previewUrl: string;
+  rotationDegrees: RotationDegrees;
   selected: boolean;
 }
 

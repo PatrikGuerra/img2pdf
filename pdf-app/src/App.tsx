@@ -7,14 +7,18 @@ import Landing from './components/Landing';
 import OptionsPanel from './components/OptionsPanel';
 import { DEFAULT_PDF_OPTIONS } from './constants/pdfOptions';
 import { downloadPdf } from './download/downloadPdf';
+import { normalizePdfFileName } from './download/pdfFileName';
 import {
   clearImageSelection,
   createImageItems,
   deleteImageById,
+  moveImageByOffset,
   moveImageBefore,
   revokeImageItems,
+  rotateImageById,
   selectImageById,
 } from './image/imageFiles';
+import { getImageSummary } from './image/imageSummary';
 import { createPdfFromImages } from './pdf/createPdfFromImages';
 import type { ImageItem, PdfOptions, PdfProgress } from './types/pdf';
 
@@ -23,6 +27,7 @@ type AppProgress = PdfProgress | { current: number; total: number };
 export default function App() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [options, setOptions] = useState<PdfOptions>(DEFAULT_PDF_OPTIONS);
+  const [pdfFileName, setPdfFileName] = useState('file.pdf');
   const [forceShowOptions, setForceShowOptions] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<AppProgress | undefined>(undefined);
@@ -52,7 +57,7 @@ export default function App() {
 
     if (files.length > 0 && imageItems.length < files.length) {
       const ignoredCount = files.length - imageItems.length;
-      setLastError(`${ignoredCount} file${ignoredCount === 1 ? '' : 's'} ignored. Only JPEG and PNG images are supported.`);
+      setLastError(`${ignoredCount} file${ignoredCount === 1 ? ' was' : 's were'} not PNG/JPEG.`);
     } else {
       setLastError(undefined);
     }
@@ -88,6 +93,14 @@ export default function App() {
     setImages((currentImages) => moveImageBefore(currentImages, droppedId, targetId));
   };
 
+  const moveImage = (id: string, offset: number) => {
+    setImages((currentImages) => moveImageByOffset(currentImages, id, offset));
+  };
+
+  const rotateImage = (id: string) => {
+    setImages((currentImages) => rotateImageById(currentImages, id));
+  };
+
   const generatePdf = async () => {
     if (images.length < 1 || busy) {
       return;
@@ -99,7 +112,7 @@ export default function App() {
       setProgress({ current: 0, total: images.length });
 
       const pdfBytes = await createPdfFromImages(images, options, setProgress);
-      downloadPdf(pdfBytes);
+      downloadPdf(pdfBytes, normalizePdfFileName(pdfFileName));
     } catch (error) {
       console.error(error);
       setLastError(error instanceof Error ? error.message : 'Unable to generate PDF.');
@@ -145,9 +158,11 @@ export default function App() {
       <div className="content">
         <ImageGrid
           images={images}
+          onMoveImage={moveImage}
           onClearSelection={clearSelection}
           onDeleteImage={deleteImage}
           onDropImage={dropImage}
+          onRotateImage={rotateImage}
           onSelectImage={selectImage}
           options={options}
         />
@@ -160,7 +175,10 @@ export default function App() {
       </div>
       <ActionBar
         busy={busy}
+        fileName={pdfFileName}
+        imageSummary={getImageSummary(images).label}
         onAddPage={pickFiles}
+        onChangeFileName={setPdfFileName}
         onGeneratePdf={generatePdf}
         onShowOptions={() => setForceShowOptions(true)}
       />

@@ -36,6 +36,7 @@ test('adds supported image files and exposes PDF options', async () => {
   await user.upload(screen.getByTestId('file-input'), file);
 
   expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
+  expect(screen.getByText('1 image · estimated 5 B')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'A4' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: 'US Letter' })).toHaveAttribute('aria-pressed', 'false');
   expect(screen.getByRole('button', { name: 'Oficio' })).toHaveAttribute('aria-pressed', 'false');
@@ -59,14 +60,15 @@ test('starts with the expected default PDF options', async () => {
 test('shows an alert for ignored files and keeps only supported images', async () => {
   const image = new File(['image'], 'photo.png', { type: 'image/png' });
   const text = new File(['text'], 'notes.txt', { type: 'text/plain' });
+  const pdf = new File(['pdf'], 'document.pdf', { type: 'application/pdf' });
 
   render(<App />);
 
   fireEvent.change(screen.getByTestId('file-input'), {
-    target: { files: [image, text] },
+    target: { files: [image, text, pdf] },
   });
 
-  expect(screen.getByRole('alert')).toHaveTextContent('1 file ignored');
+  expect(screen.getByRole('alert')).toHaveTextContent('2 files were not PNG/JPEG.');
   expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /select page 2/i })).not.toBeInTheDocument();
 });
@@ -93,8 +95,7 @@ test('revokes the object URL when a page is deleted', async () => {
   await user.upload(screen.getByTestId('file-input'), file);
   const previewUrl = vi.mocked(URL.createObjectURL).mock.results[0].value;
 
-  await user.click(screen.getByRole('button', { name: /select page 1/i }));
-  await user.click(screen.getByRole('button', { name: /delete page 1/i }));
+  await user.click(screen.getByRole('button', { name: /remove page 1/i }));
 
   expect(URL.revokeObjectURL).toHaveBeenCalledWith(previewUrl);
   expect(screen.getByRole('button', { name: /select images/i })).toBeInTheDocument();
@@ -153,6 +154,8 @@ test('passes updated options to PDF generation and downloads the result', async 
   render(<App />);
 
   await user.upload(screen.getByTestId('file-input'), file);
+  await user.clear(screen.getByLabelText('PDF name'));
+  await user.type(screen.getByLabelText('PDF name'), 'scan bundle');
   await user.click(screen.getByRole('button', { name: 'Oficio' }));
   await user.click(screen.getByRole('button', { name: '10 mm' }));
   await user.click(screen.getByRole('button', { name: 'Cover' }));
@@ -164,7 +167,12 @@ test('passes updated options to PDF generation and downloads the result', async 
 
   await waitFor(() => {
     expect(createPdfFromImages).toHaveBeenCalledWith(
-      [expect.objectContaining({ file, previewUrl: expect.stringMatching(/^blob:test-/), selected: false })],
+      [expect.objectContaining({
+        file,
+        previewUrl: expect.stringMatching(/^blob:test-/),
+        rotationDegrees: 0,
+        selected: false,
+      })],
       expect.objectContaining({
         pageSize: PAGE_SIZES.OFICIO,
         orientation: PAGE_ORIENTATIONS.PORTRAIT,
@@ -175,7 +183,58 @@ test('passes updated options to PDF generation and downloads the result', async 
       }),
       expect.any(Function),
     );
-    expect(downloadPdf).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]));
+    expect(downloadPdf).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]), 'scan bundle.pdf');
+  });
+});
+
+test('shows PDF generation progress from the progress callback', async () => {
+  const user = userEvent.setup();
+  const firstFile = new File(['one'], 'one.png', { type: 'image/png' });
+  const secondFile = new File(['two'], 'two.png', { type: 'image/png' });
+  let resolvePdf: ((bytes: Uint8Array) => void) | undefined;
+  vi.mocked(createPdfFromImages).mockImplementation((images, _options, onProgress) => {
+    onProgress?.({ current: 1, total: images.length, image: images[0] });
+    return new Promise((resolve) => {
+      resolvePdf = resolve;
+    });
+  });
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile]);
+  await user.click(screen.getByRole('button', { name: /generate pdf/i }));
+
+  expect(screen.getByText('Processing 1 of 2')).toBeInTheDocument();
+
+  if (!resolvePdf) {
+    throw new Error('Expected PDF promise resolver to be set.');
+  }
+
+  resolvePdf(new Uint8Array([1, 2, 3]));
+
+  await waitFor(() => {
+    expect(downloadPdf).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]), 'file.pdf');
+  });
+});
+
+test('page controls move, rotate and remove pages without drag-and-drop', async () => {
+  const user = userEvent.setup();
+  const firstFile = new File(['one'], 'one.png', { type: 'image/png' });
+  const secondFile = new File(['two'], 'two.png', { type: 'image/png' });
+  const thirdFile = new File(['three'], 'three.png', { type: 'image/png' });
+
+  render(<App />);
+
+  await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile, thirdFile]);
+  await user.click(screen.getByRole('button', { name: /move page 3 left/i }));
+  await user.click(screen.getByRole('button', { name: /rotate page 2 clockwise/i }));
+  await user.click(screen.getByRole('button', { name: /remove page 1/i }));
+  await user.click(screen.getByRole('button', { name: /generate pdf/i }));
+
+  await waitFor(() => {
+    const [images] = vi.mocked(createPdfFromImages).mock.calls[0];
+    expect(images.map((image) => image.file.name)).toEqual(['three.png', 'two.png']);
+    expect(images[0].rotationDegrees).toBe(90);
   });
 });
 
@@ -191,7 +250,7 @@ test('clears busy state and reports an error when PDF generation fails', async (
   await user.click(screen.getByRole('button', { name: /generate pdf/i }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent('PDF failed');
-  expect(screen.queryByText(/Generating PDF/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Preparing PDF|Processing/i)).not.toBeInTheDocument();
   expect(downloadPdf).not.toHaveBeenCalled();
 
   consoleError.mockRestore();
@@ -223,7 +282,7 @@ test('does not start a second PDF generation while busy', async () => {
   resolvePdf(new Uint8Array([4, 5, 6]));
 
   await waitFor(() => {
-    expect(downloadPdf).toHaveBeenCalledWith(new Uint8Array([4, 5, 6]));
+    expect(downloadPdf).toHaveBeenCalledWith(new Uint8Array([4, 5, 6]), 'file.pdf');
   });
 });
 

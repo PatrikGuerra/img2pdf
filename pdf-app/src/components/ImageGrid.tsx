@@ -9,6 +9,8 @@ interface ImageGridProps {
   onClearSelection: () => void;
   onSelectImage: (id: string) => void;
   onDeleteImage: (id: string) => void;
+  onMoveImage: (id: string, offset: number) => void;
+  onRotateImage: (id: string) => void;
   onDropImage: (droppedId: string, targetId: string) => void;
 }
 
@@ -18,7 +20,10 @@ interface ImagePageProps {
   options: PdfOptions;
   onSelectImage: (id: string) => void;
   onDeleteImage: (id: string) => void;
+  onMoveImage: (id: string, offset: number) => void;
+  onRotateImage: (id: string) => void;
   onDropImage: (droppedId: string, targetId: string) => void;
+  pageCount: number;
 }
 
 export default function ImageGrid({
@@ -27,6 +32,8 @@ export default function ImageGrid({
   onClearSelection,
   onSelectImage,
   onDeleteImage,
+  onMoveImage,
+  onRotateImage,
   onDropImage,
 }: ImageGridProps) {
   return (
@@ -40,7 +47,10 @@ export default function ImageGrid({
             options={options}
             onSelectImage={onSelectImage}
             onDeleteImage={onDeleteImage}
+            onMoveImage={onMoveImage}
+            onRotateImage={onRotateImage}
             onDropImage={onDropImage}
+            pageCount={images.length}
           />
         ))}
       </div>
@@ -49,7 +59,17 @@ export default function ImageGrid({
   );
 }
 
-function ImagePage({ image, index, options, onSelectImage, onDeleteImage, onDropImage }: ImagePageProps) {
+function ImagePage({
+  image,
+  index,
+  options,
+  onSelectImage,
+  onDeleteImage,
+  onMoveImage,
+  onRotateImage,
+  onDropImage,
+  pageCount,
+}: ImagePageProps) {
   const pageWrapper = getPageWrapperStyle(options);
   const pageStyle = getPageStyle(options, image.previewUrl);
 
@@ -86,22 +106,60 @@ function ImagePage({ image, index, options, onSelectImage, onDeleteImage, onDrop
         style={pageWrapper}
         tabIndex={0}
       >
-        {image.selected ? (
-          <button
-            aria-label={`Delete page ${index + 1}`}
-            className="delete-page-button"
-            onClick={(event: MouseEvent<HTMLButtonElement>) => {
-              event.stopPropagation();
-              onDeleteImage(image.id);
-            }}
-            type="button"
-          >
-            <i className="fa fa-trash" aria-hidden="true" />
-          </button>
-        ) : null}
-        <div className="page-image" style={pageStyle} />
+        <div className="page-controls">
+          <PageControlButton
+            icon="fa-trash"
+            label={`Remove page ${index + 1}`}
+            onClick={() => onDeleteImage(image.id)}
+          />
+          <PageControlButton
+            disabled={index === 0}
+            icon="fa-arrow-left"
+            label={`Move page ${index + 1} left`}
+            onClick={() => onMoveImage(image.id, -1)}
+          />
+          <PageControlButton
+            disabled={index === pageCount - 1}
+            icon="fa-arrow-right"
+            label={`Move page ${index + 1} right`}
+            onClick={() => onMoveImage(image.id, 1)}
+          />
+          <PageControlButton
+            icon="fa-rotate-right"
+            label={`Rotate page ${index + 1} clockwise`}
+            onClick={() => onRotateImage(image.id)}
+          />
+        </div>
+        <div className="page-image" style={{
+          ...pageStyle,
+          transform: `rotate(${image.rotationDegrees}deg)`,
+        }} />
       </div>
     </div>
+  );
+}
+
+interface PageControlButtonProps {
+  disabled?: boolean;
+  icon: string;
+  label: string;
+  onClick: () => void;
+}
+
+function PageControlButton({ disabled = false, icon, label, onClick }: PageControlButtonProps) {
+  return (
+    <button
+      aria-label={label}
+      className="page-control-button"
+      disabled={disabled}
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      type="button"
+    >
+      <i className={`fa ${icon}`} aria-hidden="true" />
+    </button>
   );
 }
 

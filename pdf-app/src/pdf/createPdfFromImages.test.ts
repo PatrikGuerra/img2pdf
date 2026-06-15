@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { DEFAULT_PDF_OPTIONS, IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from '../constants/pdfOptions';
-import type { ImageItem, PdfOptions, PdfPageSize } from '../types/pdf';
+import type { ImageItem, PdfOptions, PdfPageSize, RotationDegrees } from '../types/pdf';
 import { createPdfFromImages, fetchImageData } from './createPdfFromImages';
 
 interface MockPage {
@@ -133,6 +133,7 @@ describe('createPdfFromImages', () => {
   test('preserves PNG and JPEG embedding when compression is disabled', async () => {
     await createPdfFromImages([makeImageItem('image.png', 'image/png')]);
 
+    expect(imageMock.loadImage).not.toHaveBeenCalled();
     expect(pdfMocks.pdfDoc.embedPng).toHaveBeenCalledTimes(1);
     expect(pdfMocks.pdfDoc.embedJpg).not.toHaveBeenCalled();
 
@@ -142,8 +143,27 @@ describe('createPdfFromImages', () => {
 
     await createPdfFromImages([makeImageItem('image.jpg', 'image/jpeg')]);
 
+    expect(imageMock.loadImage).not.toHaveBeenCalled();
     expect(pdfMocks.pdfDoc.embedJpg).toHaveBeenCalledTimes(1);
     expect(pdfMocks.pdfDoc.embedPng).not.toHaveBeenCalled();
+  });
+
+  test('uses canvas when an image has manual rotation', async () => {
+    const { canvas, drawImage, rotate, translate, restore } = mockCanvasElement();
+
+    await createPdfFromImages([makeImageItem('image.png', 'image/png', 90)], makeOptions());
+
+    expect(imageMock.loadImage).toHaveBeenCalledWith('blob:image.png');
+    expect(canvas.width).toBe(240);
+    expect(canvas.height).toBe(320);
+    expect(translate).toHaveBeenCalledWith(240, 0);
+    expect(rotate).toHaveBeenCalledWith(Math.PI / 2);
+    expect(drawImage).toHaveBeenCalledWith({ height: 240, width: 320 }, 0, 0, 320, 240);
+    expect(imageMock.canvasToBlob).toHaveBeenCalledWith(canvas, undefined, 'image/png');
+    expect(pdfMocks.pdfDoc.embedPng).toHaveBeenCalledTimes(1);
+    expect(exifMock.readFromBinaryFile).not.toHaveBeenCalled();
+
+    restore();
   });
 
   test('uses JPEG compression quality from percentage options', async () => {
@@ -156,6 +176,21 @@ describe('createPdfFromImages', () => {
 
     expect(imageMock.canvasToBlob).toHaveBeenCalledWith(canvas, 0.8);
     expect(pdfMocks.pdfDoc.embedJpg).toHaveBeenCalledTimes(1);
+
+    restore();
+  });
+
+  test('uses JPEG quality when compression and manual rotation are enabled', async () => {
+    const { canvas, restore } = mockCanvasElement();
+
+    await createPdfFromImages([makeImageItem('image.png', 'image/png', 180)], makeOptions({
+      compressImages: true,
+      imageQuality: 70,
+    }));
+
+    expect(imageMock.canvasToBlob).toHaveBeenCalledWith(canvas, 0.7);
+    expect(pdfMocks.pdfDoc.embedJpg).toHaveBeenCalledTimes(1);
+    expect(pdfMocks.pdfDoc.embedPng).not.toHaveBeenCalled();
 
     restore();
   });
@@ -230,6 +265,37 @@ describe('fetchImageData', () => {
 
     restore();
   });
+
+  test.each([
+    [90, 240, 320, [240, 0], Math.PI / 2],
+    [180, 320, 240, [320, 240], Math.PI],
+    [270, 240, 320, [0, 320], -Math.PI / 2],
+  ])('rotates image data by %i degrees before embedding', async (
+    rotationDegrees,
+    expectedWidth,
+    expectedHeight,
+    expectedTranslate,
+    expectedRotation,
+  ) => {
+    const { canvas, rotate, translate, restore } = mockCanvasElement();
+
+    const imageData = await fetchImageData(
+      'blob:image',
+      undefined,
+      rotationDegrees as RotationDegrees,
+      'image/jpeg',
+    );
+
+    expect(canvas.width).toBe(expectedWidth);
+    expect(canvas.height).toBe(expectedHeight);
+    expect(translate).toHaveBeenCalledWith(...expectedTranslate);
+    expect(rotate).toHaveBeenCalledWith(expectedRotation);
+    expect(imageMock.canvasToBlob).toHaveBeenCalledWith(canvas, undefined);
+    expect(imageData.mime).toBe('image/jpeg');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+
+    restore();
+  });
 });
 
 function makeOptions(options: Partial<PdfOptions> = {}): PdfOptions {
@@ -239,11 +305,12 @@ function makeOptions(options: Partial<PdfOptions> = {}): PdfOptions {
   };
 }
 
-function makeImageItem(name: string, type: string): ImageItem {
+function makeImageItem(name: string, type: string, rotationDegrees: RotationDegrees = 0): ImageItem {
   return {
     id: name,
     file: new File([name], name, { type }),
     previewUrl: `blob:${name}`,
+    rotationDegrees,
     selected: false,
   };
 }
@@ -264,11 +331,15 @@ function createFetchResponse(mime: string): Response {
 function mockCanvasElement(): {
   canvas: HTMLCanvasElement;
   drawImage: ReturnType<typeof vi.fn>;
+  rotate: ReturnType<typeof vi.fn>;
   restore: () => void;
+  translate: ReturnType<typeof vi.fn>;
 } {
   const drawImage = vi.fn();
+  const rotate = vi.fn();
+  const translate = vi.fn();
   const canvas = {
-    getContext: vi.fn(() => ({ drawImage })),
+    getContext: vi.fn(() => ({ drawImage, rotate, translate })),
     height: 0,
     width: 0,
   } as unknown as HTMLCanvasElement;
@@ -277,6 +348,8 @@ function mockCanvasElement(): {
   return {
     canvas,
     drawImage,
+    rotate,
     restore: () => createElement.mockRestore(),
+    translate,
   };
 }

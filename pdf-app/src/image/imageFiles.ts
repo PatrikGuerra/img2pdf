@@ -1,4 +1,4 @@
-import type { ImageItem } from '../types/pdf';
+import type { ImageItem, RotationDegrees } from '../types/pdf';
 
 const SUPPORTED_IMAGE_TYPES = new Set(['image/png', 'image/x-png', 'image/jpeg']);
 type CreateObjectUrl = (file: File) => string;
@@ -15,6 +15,7 @@ export function createImageItems(fileList: FileList | File[] | null | undefined,
       id: createImageId(),
       file,
       previewUrl: createObjectUrl(file),
+      rotationDegrees: 0,
       selected: false,
     }));
 }
@@ -49,6 +50,25 @@ export function deleteImageById(images: ImageItem[], id: string): ImageItem[] {
   return images.filter((image) => image.id !== id);
 }
 
+export function moveImageByOffset(images: ImageItem[], id: string, offset: number): ImageItem[] {
+  if (!id || !Number.isFinite(offset) || offset === 0) {
+    return images;
+  }
+
+  const currentIndex = images.findIndex((image) => image.id === id);
+  const targetIndex = currentIndex + offset;
+
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= images.length) {
+    return images;
+  }
+
+  const nextImages = [...images];
+  const [image] = nextImages.splice(currentIndex, 1);
+  nextImages.splice(targetIndex, 0, image);
+
+  return nextImages;
+}
+
 export function moveImageBefore(images: ImageItem[], droppedId: string, targetId: string): ImageItem[] {
   if (!droppedId || !targetId || droppedId === targetId) {
     return images;
@@ -69,6 +89,23 @@ export function moveImageBefore(images: ImageItem[], droppedId: string, targetId
   return nextImages;
 }
 
+export function rotateImageById(images: ImageItem[], id: string): ImageItem[] {
+  if (!id) {
+    return images;
+  }
+
+  return images.map((image) => {
+    if (image.id !== id) {
+      return image;
+    }
+
+    return {
+      ...image,
+      rotationDegrees: getNextRotation(image.rotationDegrees),
+    };
+  });
+}
+
 export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     if (typeof Image === 'undefined') {
@@ -83,7 +120,7 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-export function canvasToBlob(canvas: HTMLCanvasElement, quality?: number): Promise<Blob> {
+export function canvasToBlob(canvas: HTMLCanvasElement, quality?: number, mime = 'image/jpeg'): Promise<Blob> {
   return new Promise((resolve, reject) => {
     try {
       canvas.toBlob((blob) => {
@@ -92,11 +129,16 @@ export function canvasToBlob(canvas: HTMLCanvasElement, quality?: number): Promi
         } else {
           reject(new Error('Unable to encode image.'));
         }
-      }, 'image/jpeg', quality);
+      }, mime, quality);
     } catch (error) {
       reject(error);
     }
   });
+}
+
+function getNextRotation(rotationDegrees: RotationDegrees | undefined): RotationDegrees {
+  const currentRotation = rotationDegrees ?? 0;
+  return ((currentRotation + 90) % 360) as RotationDegrees;
 }
 
 function createImageId(): string {
