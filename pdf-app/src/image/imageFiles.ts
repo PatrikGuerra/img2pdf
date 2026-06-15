@@ -1,10 +1,14 @@
-const SUPPORTED_IMAGE_TYPES = new Set(['image/png', 'image/x-png', 'image/jpeg']);
+import type { ImageItem } from '../types/pdf';
 
-export function isSupportedImageFile(file) {
+const SUPPORTED_IMAGE_TYPES = new Set(['image/png', 'image/x-png', 'image/jpeg']);
+type CreateObjectUrl = (file: File) => string;
+type RevokeObjectUrl = (url: string) => void;
+
+export function isSupportedImageFile(file: File | undefined | null): file is File {
   return Boolean(file && SUPPORTED_IMAGE_TYPES.has(file.type));
 }
 
-export function createImageItems(fileList, createObjectUrl = getCreateObjectUrl()) {
+export function createImageItems(fileList: FileList | File[] | null | undefined, createObjectUrl: CreateObjectUrl = getCreateObjectUrl()): ImageItem[] {
   return Array.from(fileList ?? [])
     .filter(isSupportedImageFile)
     .map((file) => ({
@@ -15,7 +19,7 @@ export function createImageItems(fileList, createObjectUrl = getCreateObjectUrl(
     }));
 }
 
-export function revokeImageItems(items, revokeObjectUrl = getRevokeObjectUrl()) {
+export function revokeImageItems(items: Array<Pick<ImageItem, 'previewUrl'> | undefined> | null | undefined, revokeObjectUrl: RevokeObjectUrl | undefined = getRevokeObjectUrl()): void {
   if (!revokeObjectUrl) {
     return;
   }
@@ -27,25 +31,25 @@ export function revokeImageItems(items, revokeObjectUrl = getRevokeObjectUrl()) 
   }
 }
 
-export function selectImageById(images, id) {
+export function selectImageById(images: ImageItem[], id: string): ImageItem[] {
   return images.map((image) => ({
     ...image,
     selected: image.id === id,
   }));
 }
 
-export function clearImageSelection(images) {
+export function clearImageSelection(images: ImageItem[]): ImageItem[] {
   return images.map((image) => ({
     ...image,
     selected: false,
   }));
 }
 
-export function deleteImageById(images, id) {
+export function deleteImageById(images: ImageItem[], id: string): ImageItem[] {
   return images.filter((image) => image.id !== id);
 }
 
-export function moveImageBefore(images, droppedId, targetId) {
+export function moveImageBefore(images: ImageItem[], droppedId: string, targetId: string): ImageItem[] {
   if (!droppedId || !targetId || droppedId === targetId) {
     return images;
   }
@@ -65,7 +69,7 @@ export function moveImageBefore(images, droppedId, targetId) {
   return nextImages;
 }
 
-export function loadImage(src) {
+export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     if (typeof Image === 'undefined') {
       reject(new Error('Image loading is not available in this environment.'));
@@ -79,7 +83,7 @@ export function loadImage(src) {
   });
 }
 
-export function canvasToBlob(canvas, quality) {
+export function canvasToBlob(canvas: HTMLCanvasElement, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     try {
       canvas.toBlob((blob) => {
@@ -95,7 +99,7 @@ export function canvasToBlob(canvas, quality) {
   });
 }
 
-function createImageId() {
+function createImageId(): string {
   if (globalThis.crypto?.randomUUID) {
     return globalThis.crypto.randomUUID();
   }
@@ -107,7 +111,7 @@ function createImageId() {
   });
 }
 
-function getCreateObjectUrl() {
+function getCreateObjectUrl(): CreateObjectUrl {
   const createObjectUrl = globalThis.URL?.createObjectURL;
   if (!createObjectUrl) {
     throw new Error('Object URLs are not available in this environment.');
@@ -116,6 +120,6 @@ function getCreateObjectUrl() {
   return createObjectUrl.bind(globalThis.URL);
 }
 
-function getRevokeObjectUrl() {
+function getRevokeObjectUrl(): RevokeObjectUrl | undefined {
   return globalThis.URL?.revokeObjectURL?.bind(globalThis.URL);
 }

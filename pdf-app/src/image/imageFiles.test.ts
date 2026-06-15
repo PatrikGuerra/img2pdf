@@ -8,6 +8,7 @@ import {
   revokeImageItems,
   selectImageById,
 } from './imageFiles';
+import type { ImageItem } from '../types/pdf';
 
 test('accepts only PNG and JPEG files', () => {
   expect(isSupportedImageFile(new File(['png'], 'image.png', { type: 'image/png' }))).toBe(true);
@@ -53,17 +54,17 @@ test('revokes preview URLs for existing image items only', () => {
 });
 
 test('selects and clears image selection immutably', () => {
-  const images = [{ id: 'a', selected: false }, { id: 'b', selected: true }];
+  const images = [makeImageItem('a', false), makeImageItem('b', true)];
 
-  expect(selectImageById(images, 'a')).toEqual([{ id: 'a', selected: true }, { id: 'b', selected: false }]);
-  expect(clearImageSelection(images)).toEqual([{ id: 'a', selected: false }, { id: 'b', selected: false }]);
-  expect(images).toEqual([{ id: 'a', selected: false }, { id: 'b', selected: true }]);
+  expect(selectImageById(images, 'a')).toEqual([makeImageItem('a', true), makeImageItem('b', false)]);
+  expect(clearImageSelection(images)).toEqual([makeImageItem('a', false), makeImageItem('b', false)]);
+  expect(images).toEqual([makeImageItem('a', false), makeImageItem('b', true)]);
 });
 
 test('moves a dropped image before the target image', () => {
-  const images = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const images = [makeImageItem('a'), makeImageItem('b'), makeImageItem('c')];
 
-  expect(moveImageBefore(images, 'c', 'a')).toEqual([{ id: 'c' }, { id: 'a' }, { id: 'b' }]);
+  expect(moveImageBefore(images, 'c', 'a')).toEqual([makeImageItem('c'), makeImageItem('a'), makeImageItem('b')]);
   expect(moveImageBefore(images, 'b', 'b')).toBe(images);
   expect(moveImageBefore(images, '', 'a')).toBe(images);
   expect(moveImageBefore(images, 'missing', 'a')).toBe(images);
@@ -73,7 +74,16 @@ test('moves a dropped image before the target image', () => {
 });
 
 test('deletes the selected image by id', () => {
-  const images = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const images = [makeImageItem('a'), makeImageItem('b'), makeImageItem('c')];
 
-  expect(deleteImageById(images, 'b')).toEqual([{ id: 'a' }, { id: 'c' }]);
+  expect(deleteImageById(images, 'b')).toEqual([makeImageItem('a'), makeImageItem('c')]);
 });
+
+function makeImageItem(id: string, selected = false): ImageItem {
+  return {
+    id,
+    file: new File([id], `${id}.png`, { type: 'image/png' }),
+    previewUrl: `blob:${id}`,
+    selected,
+  };
+}

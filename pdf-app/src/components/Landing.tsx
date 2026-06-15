@@ -1,4 +1,11 @@
-export default function Landing({ onPickFiles, onDropFiles }) {
+import type { DragEvent } from 'react';
+
+interface LandingProps {
+  onPickFiles: () => void;
+  onDropFiles: (files: FileList) => void;
+}
+
+export default function Landing({ onPickFiles, onDropFiles }: LandingProps) {
   return (
     <div className="landing-page">
       <div className="landing-copy">
@@ -11,7 +18,7 @@ export default function Landing({ onPickFiles, onDropFiles }) {
       </button>
       <div
         className="dropzone"
-        onDrop={(event) => {
+        onDrop={(event: DragEvent<HTMLDivElement>) => {
           event.preventDefault();
           event.stopPropagation();
           onDropFiles(event.dataTransfer.files);

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
 const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
-const viteConfigSource = readFileSync(resolve(process.cwd(), 'vite.config.js'), 'utf8');
+const viteConfigSource = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 
 describe('project configuration', () => {
   test('uses Vite and Vitest instead of CRA react-scripts', () => {
@@ -18,8 +18,9 @@ describe('project configuration', () => {
     expect(packageJson.scripts).toMatchObject({
       dev: 'vite',
       start: 'vite',
-      build: 'vite build',
+      build: 'npm run typecheck && vite build',
       preview: 'vite preview',
+      typecheck: 'tsc --noEmit',
       test: 'vitest run',
     });
   });

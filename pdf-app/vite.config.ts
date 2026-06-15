@@ -1,7 +1,18 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+type VitestConfig = {
+  environment: 'jsdom';
+  globals: boolean;
+  setupFiles: string;
+  css: boolean;
+};
+
+type AppViteConfig = UserConfig & {
+  test: VitestConfig;
+};
+
+const config: AppViteConfig = {
   base: './',
   plugins: [react()],
   build: {
@@ -19,7 +30,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: './src/setupTests.js',
+    setupFiles: './src/setupTests.ts',
     css: true,
   },
-});
+};
+
+export default defineConfig(config);

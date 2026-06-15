@@ -1,10 +1,16 @@
 import { degrees, PDFDocument } from 'pdf-lib';
+import type { PDFDocument as PdfLibDocument, PDFImage, PDFPage } from 'pdf-lib';
 import EXIF from 'exif-js';
 import { DEFAULT_PDF_OPTIONS, PAGE_SIZES } from '../constants/pdfOptions';
 import { canvasToBlob, loadImage } from '../image/imageFiles';
 import { getImagePlacement, getPageSize } from './pageLayout';
+import type { FetchedImageData, ImageItem, JpegOrientation, PdfOptions, PdfProgress } from '../types/pdf';
 
-export async function createPdfFromImages(images, options = DEFAULT_PDF_OPTIONS, onProgress) {
+export async function createPdfFromImages(
+  images: ImageItem[],
+  options: PdfOptions = DEFAULT_PDF_OPTIONS,
+  onProgress?: (progress: PdfProgress) => void,
+): Promise<Uint8Array> {
   const resolvedOptions = {
     ...DEFAULT_PDF_OPTIONS,
     ...options,
@@ -51,7 +57,7 @@ export async function createPdfFromImages(images, options = DEFAULT_PDF_OPTIONS,
   return pdfDoc.save();
 }
 
-export async function fetchImageData(previewUrl, quality) {
+export async function fetchImageData(previewUrl: string, quality?: number): Promise<FetchedImageData> {
   if (!quality) {
     const response = await fetch(previewUrl);
     return {
@@ -63,6 +69,9 @@ export async function fetchImageData(previewUrl, quality) {
   const image = await loadImage(previewUrl);
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas 2D context is not available.');
+  }
 
   canvas.width = image.width;
   canvas.height = image.height;
@@ -75,12 +84,12 @@ export async function fetchImageData(previewUrl, quality) {
   };
 }
 
-function normalizeImageQuality(imageQuality) {
+function normalizeImageQuality(imageQuality: number): number {
   const quality = Number(imageQuality) || DEFAULT_PDF_OPTIONS.imageQuality;
   return Math.min(100, Math.max(10, quality));
 }
 
-function readJpegOrientation(arrayBuffer, mime) {
+function readJpegOrientation(arrayBuffer: ArrayBuffer, mime: string | null | undefined): JpegOrientation {
   if (mime !== 'image/jpeg') {
     return 1;
   }
@@ -94,7 +103,7 @@ function readJpegOrientation(arrayBuffer, mime) {
   }
 }
 
-async function embedImage(pdfDoc, arrayBuffer, mime) {
+async function embedImage(pdfDoc: PdfLibDocument, arrayBuffer: ArrayBuffer, mime: string | null | undefined): Promise<PDFImage> {
   if (mime === 'image/jpeg') {
     return pdfDoc.embedJpg(arrayBuffer);
   }
@@ -106,7 +115,7 @@ async function embedImage(pdfDoc, arrayBuffer, mime) {
   throw new Error(`Unsupported image type: ${mime || 'unknown'}`);
 }
 
-function applyJpegOrientation(page, jpegOrientation) {
+function applyJpegOrientation(page: PDFPage, jpegOrientation: JpegOrientation): void {
   switch (jpegOrientation) {
     case 6:
       page.setRotation(degrees(90));

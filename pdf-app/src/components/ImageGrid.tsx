@@ -1,5 +1,25 @@
+import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent } from 'react';
 import { IMAGE_FITS, PAGE_SIZES } from '../constants/pdfOptions';
 import { getAspectRatio, getFixedPageSize } from '../pdf/pageLayout';
+import type { ImageItem, PdfOptions } from '../types/pdf';
+
+interface ImageGridProps {
+  images: ImageItem[];
+  options: PdfOptions;
+  onClearSelection: () => void;
+  onSelectImage: (id: string) => void;
+  onDeleteImage: (id: string) => void;
+  onDropImage: (droppedId: string, targetId: string) => void;
+}
+
+interface ImagePageProps {
+  image: ImageItem;
+  index: number;
+  options: PdfOptions;
+  onSelectImage: (id: string) => void;
+  onDeleteImage: (id: string) => void;
+  onDropImage: (droppedId: string, targetId: string) => void;
+}
 
 export default function ImageGrid({
   images,
@@ -8,7 +28,7 @@ export default function ImageGrid({
   onSelectImage,
   onDeleteImage,
   onDropImage,
-}) {
+}: ImageGridProps) {
   return (
     <div className="image-workspace" onClick={onClearSelection}>
       <div className="image-grid">
@@ -29,7 +49,7 @@ export default function ImageGrid({
   );
 }
 
-function ImagePage({ image, index, options, onSelectImage, onDeleteImage, onDropImage }) {
+function ImagePage({ image, index, options, onSelectImage, onDeleteImage, onDropImage }: ImagePageProps) {
   const pageWrapper = getPageWrapperStyle(options);
   const pageStyle = getPageStyle(options, image.previewUrl);
 
@@ -37,11 +57,11 @@ function ImagePage({ image, index, options, onSelectImage, onDeleteImage, onDrop
     <div
       className="image-page-shell"
       draggable
-      onDragStart={(event) => {
+      onDragStart={(event: DragEvent<HTMLDivElement>) => {
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('text/plain', image.id);
       }}
-      onDrop={(event) => {
+      onDrop={(event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
         event.stopPropagation();
         onDropImage(event.dataTransfer.getData('text/plain'), image.id);
@@ -52,11 +72,11 @@ function ImagePage({ image, index, options, onSelectImage, onDeleteImage, onDrop
       <div
         aria-label={`Select page ${index + 1}`}
         className="page-preview"
-        onClick={(event) => {
+        onClick={(event: MouseEvent<HTMLDivElement>) => {
           event.stopPropagation();
           onSelectImage(image.id);
         }}
-        onKeyDown={(event) => {
+        onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             onSelectImage(image.id);
@@ -70,7 +90,7 @@ function ImagePage({ image, index, options, onSelectImage, onDeleteImage, onDrop
           <button
             aria-label={`Delete page ${index + 1}`}
             className="delete-page-button"
-            onClick={(event) => {
+            onClick={(event: MouseEvent<HTMLButtonElement>) => {
               event.stopPropagation();
               onDeleteImage(image.id);
             }}
@@ -85,8 +105,8 @@ function ImagePage({ image, index, options, onSelectImage, onDeleteImage, onDrop
   );
 }
 
-function getPageWrapperStyle(options) {
-  const style = {
+function getPageWrapperStyle(options: PdfOptions): CSSProperties {
+  const style: CSSProperties = {
     height: '192px',
     width: '192px',
     border: 'none',
@@ -103,9 +123,9 @@ function getPageWrapperStyle(options) {
   return style;
 }
 
-function getPageStyle(options, previewUrl) {
+function getPageStyle(options: PdfOptions, previewUrl: string): CSSProperties {
   const previewMargin = getPreviewMarginPixels(options);
-  const style = {
+  const style: CSSProperties = {
     margin: `${previewMargin}px`,
     flex: '1',
     backgroundImage: `url("${previewUrl}")`,
@@ -117,7 +137,7 @@ function getPageStyle(options, previewUrl) {
   return style;
 }
 
-function getPreviewMarginPixels(options) {
+function getPreviewMarginPixels(options: PdfOptions): number {
   if (options.pageSize === PAGE_SIZES.IMAGE) {
     return 0;
   }

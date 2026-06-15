@@ -1,4 +1,12 @@
-export default function BusyOverlay({ busy, progress }) {
+interface BusyOverlayProps {
+  busy: boolean;
+  progress?: {
+    current: number;
+    total: number;
+  };
+}
+
+export default function BusyOverlay({ busy, progress }: BusyOverlayProps) {
   if (!busy) {
     return null;
   }

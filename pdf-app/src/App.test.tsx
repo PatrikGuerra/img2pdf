@@ -16,7 +16,7 @@ vi.mock('./download/downloadPdf', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  createPdfFromImages.mockResolvedValue(new Uint8Array([1, 2, 3]));
+  vi.mocked(createPdfFromImages).mockResolvedValue(new Uint8Array([1, 2, 3]));
 });
 
 test('renders the initial landing view', () => {
@@ -91,7 +91,7 @@ test('revokes the object URL when a page is deleted', async () => {
   render(<App />);
 
   await user.upload(screen.getByTestId('file-input'), file);
-  const previewUrl = URL.createObjectURL.mock.results[0].value;
+  const previewUrl = vi.mocked(URL.createObjectURL).mock.results[0].value;
 
   await user.click(screen.getByRole('button', { name: /select page 1/i }));
   await user.click(screen.getByRole('button', { name: /delete page 1/i }));
@@ -107,7 +107,7 @@ test('revokes remaining object URLs when the app unmounts', async () => {
   const { unmount } = render(<App />);
 
   await user.upload(screen.getByTestId('file-input'), [firstFile, secondFile]);
-  const previewUrls = URL.createObjectURL.mock.results.map((result) => result.value);
+  const previewUrls = vi.mocked(URL.createObjectURL).mock.results.map((result) => result.value);
 
   unmount();
 
@@ -126,16 +126,22 @@ test('reorders pages via drag-and-drop data transfer', async () => {
 
   const firstPage = screen.getByRole('button', { name: /select page 1/i });
   const secondPage = screen.getByRole('button', { name: /select page 2/i });
-  fireEvent.drop(firstPage.parentElement, {
+  const firstPageShell = firstPage.parentElement;
+  const secondPageShell = secondPage.parentElement;
+  if (!firstPageShell || !secondPageShell) {
+    throw new Error('Expected page shell elements to exist.');
+  }
+
+  fireEvent.drop(firstPageShell, {
     dataTransfer: {
-      getData: () => secondPage.parentElement.getAttribute('draggable') ? getImageIdFromDragStart(secondPage.parentElement) : '',
+      getData: () => secondPageShell.getAttribute('draggable') ? getImageIdFromDragStart(secondPageShell) : '',
     },
   });
 
   await user.click(screen.getByRole('button', { name: /generate pdf/i }));
 
   await waitFor(() => {
-    const [images] = createPdfFromImages.mock.calls[0];
+    const [images] = vi.mocked(createPdfFromImages).mock.calls[0];
     expect(images.map((image) => image.file.name)).toEqual(['two.jpg', 'one.png']);
   });
 });
@@ -177,7 +183,7 @@ test('clears busy state and reports an error when PDF generation fails', async (
   const user = userEvent.setup();
   const file = new File(['image'], 'photo.jpg', { type: 'image/jpeg' });
   const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-  createPdfFromImages.mockRejectedValue(new Error('PDF failed'));
+  vi.mocked(createPdfFromImages).mockRejectedValue(new Error('PDF failed'));
 
   render(<App />);
 
@@ -194,8 +200,8 @@ test('clears busy state and reports an error when PDF generation fails', async (
 test('does not start a second PDF generation while busy', async () => {
   const user = userEvent.setup();
   const file = new File(['image'], 'photo.jpg', { type: 'image/jpeg' });
-  let resolvePdf;
-  createPdfFromImages.mockReturnValue(new Promise((resolve) => {
+  let resolvePdf: ((bytes: Uint8Array) => void) | undefined;
+  vi.mocked(createPdfFromImages).mockReturnValue(new Promise((resolve) => {
     resolvePdf = resolve;
   }));
 
@@ -210,6 +216,10 @@ test('does not start a second PDF generation while busy', async () => {
   await user.click(generateButton);
   expect(createPdfFromImages).toHaveBeenCalledTimes(1);
 
+  if (!resolvePdf) {
+    throw new Error('Expected PDF promise resolver to be set.');
+  }
+
   resolvePdf(new Uint8Array([4, 5, 6]));
 
   await waitFor(() => {
@@ -217,7 +227,7 @@ test('does not start a second PDF generation while busy', async () => {
   });
 });
 
-function getImageIdFromDragStart(element) {
+function getImageIdFromDragStart(element: HTMLElement): string {
   const dataTransfer = {
     effectAllowed: '',
     setData: vi.fn(),

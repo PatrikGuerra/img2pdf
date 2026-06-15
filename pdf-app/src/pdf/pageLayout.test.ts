@@ -1,7 +1,12 @@
 import { PageSizes } from 'pdf-lib';
 import { expect, test } from 'vitest';
-import { IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from '../constants/pdfOptions';
+import { DEFAULT_PDF_OPTIONS, IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from '../constants/pdfOptions';
+import type { PdfOptions } from '../types/pdf';
 import { getFixedPageSize, getImagePlacement, getPageSize, mmToPdfPoints } from './pageLayout';
+
+function makeOptions(options: Partial<PdfOptions>): PdfOptions {
+  return { ...DEFAULT_PDF_OPTIONS, ...options };
+}
 
 test('returns fixed page size for portrait and landscape presets', () => {
   expect(getFixedPageSize({
@@ -28,17 +33,17 @@ test('converts millimeters to PDF points', () => {
 });
 
 test('uses image dimensions for same-as-image pages', () => {
-  expect(getPageSize({
+  expect(getPageSize(makeOptions({
     pageSize: PAGE_SIZES.IMAGE,
     orientation: PAGE_ORIENTATIONS.PORTRAIT,
-  }, { width: 640, height: 480 })).toEqual([640, 480]);
+  }), { width: 640, height: 480 })).toEqual([640, 480]);
 });
 
 test('swaps fixed page dimensions for rotated JPEG orientation', () => {
-  expect(getPageSize({
+  expect(getPageSize(makeOptions({
     pageSize: PAGE_SIZES.A4,
     orientation: PAGE_ORIENTATIONS.PORTRAIT,
-  }, { width: 100, height: 200 }, 6)).toEqual([PageSizes.A4[1], PageSizes.A4[0]]);
+  }), { width: 100, height: 200 }, 6)).toEqual([PageSizes.A4[1], PageSizes.A4[0]]);
 });
 
 test('calculates centered contain placement with margin', () => {

@@ -1,4 +1,11 @@
-export default function ActionBar({ busy, onAddPage, onGeneratePdf, onShowOptions }) {
+interface ActionBarProps {
+  busy: boolean;
+  onAddPage: () => void;
+  onGeneratePdf: () => void;
+  onShowOptions: () => void;
+}
+
+export default function ActionBar({ busy, onAddPage, onGeneratePdf, onShowOptions }: ActionBarProps) {
   return (
     <div className="actions">
       <div className="left-actions">

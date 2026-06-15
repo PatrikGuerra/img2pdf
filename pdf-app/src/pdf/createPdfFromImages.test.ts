@@ -1,12 +1,21 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from '../constants/pdfOptions';
+import { DEFAULT_PDF_OPTIONS, IMAGE_FITS, PAGE_MARGINS, PAGE_ORIENTATIONS, PAGE_SIZES } from '../constants/pdfOptions';
+import type { ImageItem, PdfOptions, PdfPageSize } from '../types/pdf';
 import { createPdfFromImages, fetchImageData } from './createPdfFromImages';
 
+interface MockPage {
+  size: PdfPageSize;
+  drawImage: ReturnType<typeof vi.fn>;
+  getHeight: ReturnType<typeof vi.fn>;
+  getWidth: ReturnType<typeof vi.fn>;
+  setRotation: ReturnType<typeof vi.fn>;
+}
+
 const pdfMocks = vi.hoisted(() => {
-  const pages = [];
+  const pages: MockPage[] = [];
   const pdfDoc = {
-    addPage: vi.fn((size) => {
-      const page = {
+    addPage: vi.fn((size: PdfPageSize) => {
+      const page: MockPage = {
         size,
         drawImage: vi.fn(),
         getHeight: vi.fn(() => size[1]),
@@ -23,7 +32,7 @@ const pdfMocks = vi.hoisted(() => {
 
   return {
     createPdfDoc: vi.fn(async () => pdfDoc),
-    degrees: vi.fn((value) => ({ degrees: value })),
+    degrees: vi.fn((value: number) => ({ degrees: value })),
     pages,
     pdfDoc,
   };
@@ -61,23 +70,14 @@ describe('createPdfFromImages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     pdfMocks.pages.length = 0;
-    globalThis.fetch = vi.fn(async () => createFetchResponse('image/png'));
+    mockFetchMime('image/png');
   });
 
   test('calls progress once per processed image and saves the PDF', async () => {
     const onProgress = vi.fn();
-    const images = [
-      { file: new File(['one'], 'one.png', { type: 'image/png' }), previewUrl: 'blob:one' },
-      { file: new File(['two'], 'two.png', { type: 'image/png' }), previewUrl: 'blob:two' },
-    ];
+    const images = [makeImageItem('one.png', 'image/png'), makeImageItem('two.png', 'image/png')];
 
-    const bytes = await createPdfFromImages(images, {
-      pageSize: PAGE_SIZES.A4,
-      orientation: PAGE_ORIENTATIONS.PORTRAIT,
-      margin: PAGE_MARGINS.NONE,
-      compressImages: false,
-      imageQuality: 80,
-    }, onProgress);
+    const bytes = await createPdfFromImages(images, makeOptions(), onProgress);
 
     expect(bytes).toEqual(new Uint8Array([9, 8, 7]));
     expect(onProgress).toHaveBeenCalledTimes(2);
@@ -87,15 +87,7 @@ describe('createPdfFromImages', () => {
   });
 
   test('uses contain placement by default', async () => {
-    await createPdfFromImages([
-      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
-    ], {
-      pageSize: PAGE_SIZES.A4,
-      orientation: PAGE_ORIENTATIONS.PORTRAIT,
-      margin: PAGE_MARGINS.NONE,
-      compressImages: false,
-      imageQuality: 80,
-    });
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions());
 
     expect(pdfMocks.pages[0].drawImage).toHaveBeenCalledWith(
       { height: 100, width: 200 },
@@ -109,18 +101,11 @@ describe('createPdfFromImages', () => {
   });
 
   test('uses cover placement when requested', async () => {
-    await createPdfFromImages([
-      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
-    ], {
-      pageSize: PAGE_SIZES.A4,
-      orientation: PAGE_ORIENTATIONS.PORTRAIT,
-      margin: PAGE_MARGINS.NONE,
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
       imageFit: IMAGE_FITS.COVER,
-      compressImages: false,
-      imageQuality: 80,
-    });
+    }));
 
-    const placement = pdfMocks.pages[0].drawImage.mock.calls[0][1];
+    const placement = pdfMocks.pages[0].drawImage.mock.calls[0][1] as { width: number; height: number; x: number; y: number };
 
     expect(placement.width).toBeGreaterThan(595.28);
     expect(placement.height).toBeCloseTo(841.89, 2);
@@ -129,16 +114,12 @@ describe('createPdfFromImages', () => {
   });
 
   test('ignores margin and fit for same-as-image pages', async () => {
-    await createPdfFromImages([
-      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
-    ], {
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
       pageSize: PAGE_SIZES.IMAGE,
       orientation: PAGE_ORIENTATIONS.LANDSCAPE,
       margin: PAGE_MARGINS.MM_20,
       imageFit: IMAGE_FITS.COVER,
-      compressImages: false,
-      imageQuality: 80,
-    });
+    }));
 
     expect(pdfMocks.pdfDoc.addPage).toHaveBeenCalledWith([200, 100]);
     expect(pdfMocks.pages[0].drawImage).toHaveBeenCalledWith({ height: 100, width: 200 }, {
@@ -150,56 +131,40 @@ describe('createPdfFromImages', () => {
   });
 
   test('preserves PNG and JPEG embedding when compression is disabled', async () => {
-    await createPdfFromImages([
-      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
-    ]);
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')]);
 
     expect(pdfMocks.pdfDoc.embedPng).toHaveBeenCalledTimes(1);
     expect(pdfMocks.pdfDoc.embedJpg).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
     pdfMocks.pages.length = 0;
-    globalThis.fetch = vi.fn(async () => createFetchResponse('image/jpeg'));
+    mockFetchMime('image/jpeg');
 
-    await createPdfFromImages([
-      { file: new File(['jpg'], 'image.jpg', { type: 'image/jpeg' }), previewUrl: 'blob:jpg' },
-    ]);
+    await createPdfFromImages([makeImageItem('image.jpg', 'image/jpeg')]);
 
     expect(pdfMocks.pdfDoc.embedJpg).toHaveBeenCalledTimes(1);
     expect(pdfMocks.pdfDoc.embedPng).not.toHaveBeenCalled();
   });
 
   test('uses JPEG compression quality from percentage options', async () => {
-    const drawImage = vi.fn();
-    const canvas = {
-      getContext: vi.fn(() => ({ drawImage })),
-      height: 0,
-      width: 0,
-    };
-    const createElement = vi.spyOn(document, 'createElement').mockReturnValue(canvas);
+    const { canvas, restore } = mockCanvasElement();
 
-    await createPdfFromImages([
-      { file: new File(['png'], 'image.png', { type: 'image/png' }), previewUrl: 'blob:png' },
-    ], {
-      pageSize: PAGE_SIZES.A4,
-      orientation: PAGE_ORIENTATIONS.PORTRAIT,
-      margin: PAGE_MARGINS.NONE,
-      imageFit: IMAGE_FITS.CONTAIN,
+    await createPdfFromImages([makeImageItem('image.png', 'image/png')], makeOptions({
       compressImages: true,
       imageQuality: 80,
-    });
+    }));
 
-    expect(imageMock.canvasToBlob).toHaveBeenCalledWith(expect.any(Object), 0.8);
+    expect(imageMock.canvasToBlob).toHaveBeenCalledWith(canvas, 0.8);
     expect(pdfMocks.pdfDoc.embedJpg).toHaveBeenCalledTimes(1);
 
-    createElement.mockRestore();
+    restore();
   });
 
   test('throws a clear error for unsupported MIME types', async () => {
-    globalThis.fetch = vi.fn(async () => createFetchResponse('image/gif'));
+    mockFetchMime('image/gif');
 
     await expect(createPdfFromImages([
-      { file: new File(['gif'], 'image.gif', { type: 'image/gif' }), previewUrl: 'blob:gif' },
+      makeImageItem('image.gif', 'image/gif'),
     ])).rejects.toThrow('Unsupported image type: image/gif');
   });
 
@@ -208,18 +173,10 @@ describe('createPdfFromImages', () => {
     [6, 90],
     [8, 270],
   ])('applies EXIF orientation %i as a %i degree page rotation', async (orientation, expectedDegrees) => {
-    globalThis.fetch = vi.fn(async () => createFetchResponse('image/jpeg'));
+    mockFetchMime('image/jpeg');
     exifMock.readFromBinaryFile.mockReturnValue({ Orientation: orientation });
 
-    await createPdfFromImages([
-      { file: new File(['jpg'], 'image.jpg', { type: 'image/jpeg' }), previewUrl: 'blob:jpg' },
-    ], {
-      pageSize: PAGE_SIZES.A4,
-      orientation: PAGE_ORIENTATIONS.PORTRAIT,
-      margin: PAGE_MARGINS.NONE,
-      compressImages: false,
-      imageQuality: 80,
-    });
+    await createPdfFromImages([makeImageItem('image.jpg', 'image/jpeg')], makeOptions());
 
     expect(pdfMocks.degrees).toHaveBeenCalledWith(expectedDegrees);
     expect(pdfMocks.pages[0].setRotation).toHaveBeenCalledWith({ degrees: expectedDegrees });
@@ -227,14 +184,12 @@ describe('createPdfFromImages', () => {
 
   test('falls back to normal orientation when EXIF parsing fails', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    globalThis.fetch = vi.fn(async () => createFetchResponse('image/jpeg'));
+    mockFetchMime('image/jpeg');
     exifMock.readFromBinaryFile.mockImplementation(() => {
       throw new Error('bad exif');
     });
 
-    await createPdfFromImages([
-      { file: new File(['jpg'], 'image.jpg', { type: 'image/jpeg' }), previewUrl: 'blob:jpg' },
-    ]);
+    await createPdfFromImages([makeImageItem('image.jpg', 'image/jpeg')]);
 
     expect(pdfMocks.pages[0].setRotation).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalled();
@@ -246,11 +201,11 @@ describe('createPdfFromImages', () => {
 describe('fetchImageData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    globalThis.fetch = vi.fn();
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
   });
 
   test('uses fetch directly when compression is disabled', async () => {
-    globalThis.fetch = vi.fn(async () => createFetchResponse('image/png'));
+    mockFetchMime('image/png');
 
     const imageData = await fetchImageData('blob:image');
 
@@ -261,13 +216,7 @@ describe('fetchImageData', () => {
   });
 
   test('uses canvas and JPEG quality when compression is enabled', async () => {
-    const drawImage = vi.fn();
-    const canvas = {
-      getContext: vi.fn(() => ({ drawImage })),
-      height: 0,
-      width: 0,
-    };
-    const createElement = vi.spyOn(document, 'createElement').mockReturnValue(canvas);
+    const { canvas, drawImage, restore } = mockCanvasElement();
 
     const imageData = await fetchImageData('blob:image', 0.8);
 
@@ -279,15 +228,55 @@ describe('fetchImageData', () => {
     expect(imageData.mime).toBe('image/jpeg');
     expect(globalThis.fetch).not.toHaveBeenCalled();
 
-    createElement.mockRestore();
+    restore();
   });
 });
 
-function createFetchResponse(mime) {
+function makeOptions(options: Partial<PdfOptions> = {}): PdfOptions {
+  return {
+    ...DEFAULT_PDF_OPTIONS,
+    ...options,
+  };
+}
+
+function makeImageItem(name: string, type: string): ImageItem {
+  return {
+    id: name,
+    file: new File([name], name, { type }),
+    previewUrl: `blob:${name}`,
+    selected: false,
+  };
+}
+
+function mockFetchMime(mime: string): void {
+  globalThis.fetch = vi.fn(async () => createFetchResponse(mime)) as unknown as typeof fetch;
+}
+
+function createFetchResponse(mime: string): Response {
   return {
     arrayBuffer: vi.fn(async () => new ArrayBuffer(4)),
     headers: {
       get: vi.fn(() => mime),
     },
+  } as unknown as Response;
+}
+
+function mockCanvasElement(): {
+  canvas: HTMLCanvasElement;
+  drawImage: ReturnType<typeof vi.fn>;
+  restore: () => void;
+} {
+  const drawImage = vi.fn();
+  const canvas = {
+    getContext: vi.fn(() => ({ drawImage })),
+    height: 0,
+    width: 0,
+  } as unknown as HTMLCanvasElement;
+  const createElement = vi.spyOn(document, 'createElement').mockReturnValue(canvas);
+
+  return {
+    canvas,
+    drawImage,
+    restore: () => createElement.mockRestore(),
   };
 }

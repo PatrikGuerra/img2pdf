@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   IMAGE_FIT_LABELS,
   IMAGE_FITS,
@@ -8,8 +9,27 @@ import {
   PAGE_SIZE_LABELS,
   PAGE_SIZES,
 } from '../constants/pdfOptions';
+import type { PdfOptions } from '../types/pdf';
 
-export default function OptionsPanel({ forceShowOptions, options, onChangeOptions, onClose }) {
+interface OptionsPanelProps {
+  forceShowOptions: boolean;
+  options: PdfOptions;
+  onChangeOptions: (options: Partial<PdfOptions>) => void;
+  onClose: () => void;
+}
+
+interface OptionSectionProps {
+  children: ReactNode;
+  title: string;
+}
+
+interface OptionButtonProps {
+  active: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}
+
+export default function OptionsPanel({ forceShowOptions, options, onChangeOptions, onClose }: OptionsPanelProps) {
   return (
     <div className={`options${forceShowOptions ? ' options--visible' : ''}`}>
       <div className="options-header">
@@ -153,7 +173,7 @@ export default function OptionsPanel({ forceShowOptions, options, onChangeOption
   );
 }
 
-function OptionSection({ children, title }) {
+function OptionSection({ children, title }: OptionSectionProps) {
   return (
     <div>
       <div className="option-section-title">{title}</div>
@@ -162,7 +182,7 @@ function OptionSection({ children, title }) {
   );
 }
 
-function OptionButton({ active, children, onClick }) {
+function OptionButton({ active, children, onClick }: OptionButtonProps) {
   return (
     <button
       aria-pressed={active}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import ActionBar from './components/ActionBar';
 import BusyOverlay from './components/BusyOverlay';
 import ImageGrid from './components/ImageGrid';
@@ -15,15 +16,18 @@ import {
   selectImageById,
 } from './image/imageFiles';
 import { createPdfFromImages } from './pdf/createPdfFromImages';
+import type { ImageItem, PdfOptions, PdfProgress } from './types/pdf';
+
+type AppProgress = PdfProgress | { current: number; total: number };
 
 export default function App() {
-  const [images, setImages] = useState([]);
-  const [options, setOptions] = useState(DEFAULT_PDF_OPTIONS);
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [options, setOptions] = useState<PdfOptions>(DEFAULT_PDF_OPTIONS);
   const [forceShowOptions, setForceShowOptions] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState(undefined);
-  const [lastError, setLastError] = useState(undefined);
-  const fileInput = useRef(null);
+  const [progress, setProgress] = useState<AppProgress | undefined>(undefined);
+  const [lastError, setLastError] = useState<string | undefined>(undefined);
+  const fileInput = useRef<HTMLInputElement>(null);
   const imagesRef = useRef(images);
 
   useEffect(() => {
@@ -38,7 +42,7 @@ export default function App() {
     fileInput.current?.click();
   };
 
-  const handleFiles = (fileList) => {
+  const handleFiles = (fileList: FileList | File[] | null | undefined) => {
     const files = Array.from(fileList ?? []);
     const imageItems = createImageItems(files);
 
@@ -58,7 +62,7 @@ export default function App() {
     }
   };
 
-  const updateOptions = (nextOptions) => {
+  const updateOptions = (nextOptions: Partial<PdfOptions>) => {
     setOptions((currentOptions) => ({
       ...currentOptions,
       ...nextOptions,
@@ -69,18 +73,18 @@ export default function App() {
     setImages((currentImages) => clearImageSelection(currentImages));
   };
 
-  const selectImage = (id) => {
+  const selectImage = (id: string) => {
     setImages((currentImages) => selectImageById(currentImages, id));
   };
 
-  const deleteImage = (id) => {
+  const deleteImage = (id: string) => {
     setImages((currentImages) => {
       revokeImageItems(currentImages.filter((image) => image.id === id));
       return deleteImageById(currentImages, id);
     });
   };
 
-  const dropImage = (droppedId, targetId) => {
+  const dropImage = (droppedId: string, targetId: string) => {
     setImages((currentImages) => moveImageBefore(currentImages, droppedId, targetId));
   };
 
@@ -98,7 +102,7 @@ export default function App() {
       downloadPdf(pdfBytes);
     } catch (error) {
       console.error(error);
-      setLastError(error?.message || 'Unable to generate PDF.');
+      setLastError(error instanceof Error ? error.message : 'Unable to generate PDF.');
     } finally {
       setBusy(false);
       setProgress(undefined);
@@ -110,7 +114,7 @@ export default function App() {
       accept="image/png,image/jpeg"
       data-testid="file-input"
       multiple
-      onChange={(event) => handleFiles(event.target.files)}
+      onChange={(event: ChangeEvent<HTMLInputElement>) => handleFiles(event.target.files)}
       ref={fileInput}
       style={{ display: 'none' }}
       type="file"
