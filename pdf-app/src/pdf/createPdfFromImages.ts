@@ -6,6 +6,12 @@ import { canvasToBlob, loadImage } from '../image/imageFiles';
 import { getImagePlacement, getPageSize } from './pageLayout';
 import type { FetchedImageData, ImageItem, JpegOrientation, PdfOptions, PdfProgress, RotationDegrees } from '../types/pdf';
 
+interface ImageTransform {
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
+  rotationDegrees?: RotationDegrees;
+}
+
 export async function createPdfFromImages(
   images: ImageItem[],
   options: PdfOptions = DEFAULT_PDF_OPTIONS,
@@ -21,16 +27,25 @@ export async function createPdfFromImages(
   for (let index = 0; index < total; index += 1) {
     const imageItem = images[index];
     const manualRotation = normalizeRotation(imageItem.rotationDegrees);
+    const hasManualTransform = manualRotation !== 0 || imageItem.flipHorizontal || imageItem.flipVertical;
     const imageData = await fetchImageData(
       imageItem.previewUrl,
       resolvedOptions.compressImages ? normalizeImageQuality(resolvedOptions.imageQuality) / 100 : undefined,
-      manualRotation,
+      {
+        flipHorizontal: imageItem.flipHorizontal,
+        flipVertical: imageItem.flipVertical,
+        rotationDegrees: manualRotation,
+      },
       imageItem.file?.type,
     );
     const mime = imageData.mime || imageItem.file?.type;
-    const jpegOrientation = manualRotation === 0 ? readJpegOrientation(imageData.arrayBuffer, mime) : 1;
+    const jpegOrientation = hasManualTransform ? 1 : readJpegOrientation(imageData.arrayBuffer, mime);
     const embeddedImage = await embedImage(pdfDoc, imageData.arrayBuffer, mime);
-    const pageSize = getPageSize(resolvedOptions, embeddedImage, jpegOrientation);
+    const imageOptions = {
+      ...resolvedOptions,
+      orientation: imageItem.pageOrientation || resolvedOptions.orientation,
+    };
+    const pageSize = getPageSize(imageOptions, embeddedImage, jpegOrientation);
     const page = pdfDoc.addPage(pageSize);
 
     if (resolvedOptions.pageSize === PAGE_SIZES.IMAGE) {
@@ -63,12 +78,15 @@ export async function createPdfFromImages(
 export async function fetchImageData(
   previewUrl: string,
   quality?: number,
-  rotationDegrees: RotationDegrees = 0,
+  transform: ImageTransform = {},
   preferredMime?: string,
 ): Promise<FetchedImageData> {
-  const manualRotation = normalizeRotation(rotationDegrees);
+  const manualRotation = normalizeRotation(transform.rotationDegrees);
+  const flipHorizontal = Boolean(transform.flipHorizontal);
+  const flipVertical = Boolean(transform.flipVertical);
+  const hasManualTransform = manualRotation !== 0 || flipHorizontal || flipVertical;
 
-  if (quality === undefined && manualRotation === 0) {
+  if (quality === undefined && !hasManualTransform) {
     const response = await fetch(previewUrl);
     return {
       arrayBuffer: await response.arrayBuffer(),
@@ -86,7 +104,11 @@ export async function fetchImageData(
   const swapsDimensions = manualRotation === 90 || manualRotation === 270;
   canvas.width = swapsDimensions ? image.height : image.width;
   canvas.height = swapsDimensions ? image.width : image.height;
-  drawImageToCanvas(context, image, canvas, manualRotation);
+  drawImageToCanvas(context, image, canvas, {
+    flipHorizontal,
+    flipVertical,
+    rotationDegrees: manualRotation,
+  });
 
   const outputMime = getCanvasMime(preferredMime, quality);
   const blob = outputMime === 'image/png'
@@ -123,26 +145,19 @@ function drawImageToCanvas(
   context: CanvasRenderingContext2D,
   image: HTMLImageElement,
   canvas: HTMLCanvasElement,
-  rotationDegrees: RotationDegrees,
+  transform: Required<ImageTransform>,
 ): void {
-  switch (rotationDegrees) {
-    case 90:
-      context.translate(canvas.width, 0);
-      context.rotate(Math.PI / 2);
-      break;
-    case 180:
-      context.translate(canvas.width, canvas.height);
-      context.rotate(Math.PI);
-      break;
-    case 270:
-      context.translate(0, canvas.height);
-      context.rotate(-Math.PI / 2);
-      break;
-    default:
-      break;
+  const hasManualTransform = transform.rotationDegrees !== 0 || transform.flipHorizontal || transform.flipVertical;
+
+  if (!hasManualTransform) {
+    context.drawImage(image, 0, 0, image.width, image.height);
+    return;
   }
 
-  context.drawImage(image, 0, 0, image.width, image.height);
+  context.translate(canvas.width / 2, canvas.height / 2);
+  context.rotate(transform.rotationDegrees * Math.PI / 180);
+  context.scale(transform.flipHorizontal ? -1 : 1, transform.flipVertical ? -1 : 1);
+  context.drawImage(image, -image.width / 2, -image.height / 2, image.width, image.height);
 }
 
 function readJpegOrientation(arrayBuffer: ArrayBuffer, mime: string | null | undefined): JpegOrientation {

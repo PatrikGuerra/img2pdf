@@ -2,25 +2,30 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import ActionBar from './components/ActionBar';
 import BusyOverlay from './components/BusyOverlay';
+import ConfirmationDialog from './components/ConfirmationDialog';
 import ImageGrid from './components/ImageGrid';
 import Landing from './components/Landing';
 import OptionsPanel from './components/OptionsPanel';
-import { DEFAULT_PDF_OPTIONS } from './constants/pdfOptions';
+import { DEFAULT_PDF_OPTIONS, PAGE_ORIENTATION_LABELS } from './constants/pdfOptions';
 import { downloadPdf } from './download/downloadPdf';
 import { normalizePdfFileName } from './download/pdfFileName';
 import {
   clearImageSelection,
   createImageItems,
   deleteImageById,
+  flipImageById,
+  hasMixedImageOrientations,
   moveImageByOffset,
   moveImageBefore,
   revokeImageItems,
   rotateImageById,
   selectImageById,
+  setAllImageOrientations,
+  setImageOrientationById,
 } from './image/imageFiles';
 import { getImageSummary } from './image/imageSummary';
 import { createPdfFromImages } from './pdf/createPdfFromImages';
-import type { ImageItem, PdfOptions, PdfProgress } from './types/pdf';
+import type { FlipAxis, ImageItem, PageOrientation, PdfOptions, PdfProgress } from './types/pdf';
 
 type AppProgress = PdfProgress | { current: number; total: number };
 
@@ -30,6 +35,8 @@ export default function App() {
   const [pdfFileName, setPdfFileName] = useState('file.pdf');
   const [forceShowOptions, setForceShowOptions] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ id: string; pageNumber: number } | undefined>(undefined);
+  const [orientationConfirmation, setOrientationConfirmation] = useState<PageOrientation | undefined>(undefined);
   const [progress, setProgress] = useState<AppProgress | undefined>(undefined);
   const [lastError, setLastError] = useState<string | undefined>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -47,12 +54,12 @@ export default function App() {
     fileInput.current?.click();
   };
 
-  const handleFiles = (fileList: FileList | File[] | null | undefined) => {
+  const handleFiles = async (fileList: FileList | File[] | null | undefined) => {
     const files = Array.from(fileList ?? []);
-    const imageItems = createImageItems(files);
+    const imageItems = await createImageItems(files, undefined, options.orientation);
 
     if (imageItems.length > 0) {
-      setImages((currentImages) => [...currentImages, ...imageItems]);
+      setImages((currentImages) => appendImageItemsWithSelection(currentImages, imageItems));
     }
 
     if (files.length > 0 && imageItems.length < files.length) {
@@ -74,6 +81,23 @@ export default function App() {
     }));
   };
 
+  const applyAllOrientations = (orientation: PageOrientation) => {
+    setOptions((currentOptions) => ({
+      ...currentOptions,
+      orientation,
+    }));
+    setImages((currentImages) => setAllImageOrientations(currentImages, orientation));
+  };
+
+  const changeGlobalOrientation = (orientation: PageOrientation) => {
+    if (images.length > 0 && hasMixedImageOrientations(images)) {
+      setOrientationConfirmation(orientation);
+      return;
+    }
+
+    applyAllOrientations(orientation);
+  };
+
   const clearSelection = () => {
     setImages((currentImages) => clearImageSelection(currentImages));
   };
@@ -85,8 +109,19 @@ export default function App() {
   const deleteImage = (id: string) => {
     setImages((currentImages) => {
       revokeImageItems(currentImages.filter((image) => image.id === id));
-      return deleteImageById(currentImages, id);
+      return deleteImageAndSelectFallback(currentImages, id);
     });
+  };
+
+  const requestDeleteImage = (id: string, pageNumber: number) => {
+    setDeleteConfirmation({ id, pageNumber });
+  };
+
+  const confirmDeleteImage = () => {
+    if (deleteConfirmation) {
+      deleteImage(deleteConfirmation.id);
+      setDeleteConfirmation(undefined);
+    }
   };
 
   const dropImage = (droppedId: string, targetId: string) => {
@@ -99,6 +134,14 @@ export default function App() {
 
   const rotateImage = (id: string) => {
     setImages((currentImages) => rotateImageById(currentImages, id));
+  };
+
+  const flipImage = (id: string, axis: FlipAxis) => {
+    setImages((currentImages) => flipImageById(currentImages, id, axis));
+  };
+
+  const changeImageOrientation = (id: string, pageOrientation: PageOrientation) => {
+    setImages((currentImages) => setImageOrientationById(currentImages, id, pageOrientation));
   };
 
   const generatePdf = async () => {
@@ -158,10 +201,12 @@ export default function App() {
       <div className="content">
         <ImageGrid
           images={images}
-          onMoveImage={moveImage}
+          onChangeImageOrientation={changeImageOrientation}
           onClearSelection={clearSelection}
-          onDeleteImage={deleteImage}
           onDropImage={dropImage}
+          onFlipImage={flipImage}
+          onMoveImage={moveImage}
+          onRequestDeleteImage={requestDeleteImage}
           onRotateImage={rotateImage}
           onSelectImage={selectImage}
           options={options}
@@ -169,6 +214,7 @@ export default function App() {
         <OptionsPanel
           forceShowOptions={forceShowOptions}
           onChangeOptions={updateOptions}
+          onChangeOrientation={changeGlobalOrientation}
           onClose={() => setForceShowOptions(false)}
           options={options}
         />
@@ -184,6 +230,62 @@ export default function App() {
       />
       {fileInputElement}
       <BusyOverlay busy={busy} progress={progress} />
+      {deleteConfirmation ? (
+        <ConfirmationDialog
+          body={`Page ${deleteConfirmation.pageNumber} will be removed from the PDF.`}
+          confirmLabel="Remove"
+          onCancel={() => setDeleteConfirmation(undefined)}
+          onConfirm={confirmDeleteImage}
+          title="Remove page?"
+        />
+      ) : null}
+      {orientationConfirmation ? (
+        <ConfirmationDialog
+          body={`Your pages currently use both Portrait and Landscape. This will set every page to ${PAGE_ORIENTATION_LABELS[orientationConfirmation]}.`}
+          confirmLabel="Change all"
+          onCancel={() => setOrientationConfirmation(undefined)}
+          onConfirm={() => {
+            applyAllOrientations(orientationConfirmation);
+            setOrientationConfirmation(undefined);
+          }}
+          title="Change all page orientations?"
+        />
+      ) : null}
     </div>
   );
+}
+
+function appendImageItemsWithSelection(currentImages: ImageItem[], imageItems: ImageItem[]): ImageItem[] {
+  if (currentImages.some((image) => image.selected) || imageItems.length < 1) {
+    return [...currentImages, ...imageItems];
+  }
+
+  return [
+    ...currentImages,
+    {
+      ...imageItems[0],
+      selected: true,
+    },
+    ...imageItems.slice(1),
+  ];
+}
+
+function deleteImageAndSelectFallback(currentImages: ImageItem[], id: string): ImageItem[] {
+  const removedIndex = currentImages.findIndex((image) => image.id === id);
+  if (removedIndex < 0) {
+    return currentImages;
+  }
+
+  const removedWasSelected = currentImages[removedIndex].selected;
+  const nextImages = deleteImageById(currentImages, id);
+
+  if (nextImages.length < 1 || (!removedWasSelected && nextImages.some((image) => image.selected))) {
+    return nextImages;
+  }
+
+  const fallbackIndex = Math.min(removedIndex, nextImages.length - 1);
+  return nextImages.map((image, index) => ({
+    ...image,
+    selected: index === fallbackIndex,
+  }));
 }

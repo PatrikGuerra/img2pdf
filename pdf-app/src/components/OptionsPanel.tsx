@@ -9,12 +9,13 @@ import {
   PAGE_SIZE_LABELS,
   PAGE_SIZES,
 } from '../constants/pdfOptions';
-import type { PdfOptions } from '../types/pdf';
+import type { PageOrientation, PdfOptions } from '../types/pdf';
 
 interface OptionsPanelProps {
   forceShowOptions: boolean;
   options: PdfOptions;
   onChangeOptions: (options: Partial<PdfOptions>) => void;
+  onChangeOrientation: (orientation: PageOrientation) => void;
   onClose: () => void;
 }
 
@@ -29,7 +30,13 @@ interface OptionButtonProps {
   onClick: () => void;
 }
 
-export default function OptionsPanel({ forceShowOptions, options, onChangeOptions, onClose }: OptionsPanelProps) {
+export default function OptionsPanel({
+  forceShowOptions,
+  options,
+  onChangeOptions,
+  onChangeOrientation,
+  onClose,
+}: OptionsPanelProps) {
   return (
     <div className={`options${forceShowOptions ? ' options--visible' : ''}`}>
       <div className="options-header">
@@ -44,13 +51,13 @@ export default function OptionsPanel({ forceShowOptions, options, onChangeOption
       <OptionSection title="Page orientation">
         <OptionButton
           active={options.orientation === PAGE_ORIENTATIONS.PORTRAIT}
-          onClick={() => onChangeOptions({ orientation: PAGE_ORIENTATIONS.PORTRAIT })}
+          onClick={() => onChangeOrientation(PAGE_ORIENTATIONS.PORTRAIT)}
         >
           {PAGE_ORIENTATION_LABELS[PAGE_ORIENTATIONS.PORTRAIT]}
         </OptionButton>
         <OptionButton
           active={options.orientation === PAGE_ORIENTATIONS.LANDSCAPE}
-          onClick={() => onChangeOptions({ orientation: PAGE_ORIENTATIONS.LANDSCAPE })}
+          onClick={() => onChangeOrientation(PAGE_ORIENTATIONS.LANDSCAPE)}
         >
           {PAGE_ORIENTATION_LABELS[PAGE_ORIENTATIONS.LANDSCAPE]}
         </OptionButton>

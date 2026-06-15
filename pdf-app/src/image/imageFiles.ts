@@ -1,23 +1,46 @@
-import type { ImageItem, RotationDegrees } from '../types/pdf';
+import { PAGE_ORIENTATIONS } from '../constants/pdfOptions';
+import type { FlipAxis, ImageDimensions, ImageItem, PageOrientation, RotationDegrees } from '../types/pdf';
 
 const SUPPORTED_IMAGE_TYPES = new Set(['image/png', 'image/x-png', 'image/jpeg']);
 type CreateObjectUrl = (file: File) => string;
+type LoadImageDimensions = (src: string) => Promise<ImageDimensions>;
 type RevokeObjectUrl = (url: string) => void;
 
 export function isSupportedImageFile(file: File | undefined | null): file is File {
   return Boolean(file && SUPPORTED_IMAGE_TYPES.has(file.type));
 }
 
-export function createImageItems(fileList: FileList | File[] | null | undefined, createObjectUrl: CreateObjectUrl = getCreateObjectUrl()): ImageItem[] {
-  return Array.from(fileList ?? [])
+export async function createImageItems(
+  fileList: FileList | File[] | null | undefined,
+  createObjectUrl: CreateObjectUrl = getCreateObjectUrl(),
+  fallbackOrientation: PageOrientation = PAGE_ORIENTATIONS.PORTRAIT,
+  loadDimensions: LoadImageDimensions = loadImageDimensions,
+): Promise<ImageItem[]> {
+  const items = Array.from(fileList ?? [])
     .filter(isSupportedImageFile)
     .map((file) => ({
       id: createImageId(),
       file,
+      flipHorizontal: false,
+      flipVertical: false,
+      pageOrientation: fallbackOrientation,
       previewUrl: createObjectUrl(file),
-      rotationDegrees: 0,
+      rotationDegrees: 0 as const,
       selected: false,
     }));
+
+  return Promise.all(items.map(async (item) => {
+    try {
+      const naturalDimensions = await loadDimensions(item.previewUrl);
+      return {
+        ...item,
+        naturalDimensions,
+        pageOrientation: getOrientationFromDimensions(naturalDimensions, fallbackOrientation),
+      };
+    } catch {
+      return item;
+    }
+  }));
 }
 
 export function revokeImageItems(items: Array<Pick<ImageItem, 'previewUrl'> | undefined> | null | undefined, revokeObjectUrl: RevokeObjectUrl | undefined = getRevokeObjectUrl()): void {
@@ -106,6 +129,62 @@ export function rotateImageById(images: ImageItem[], id: string): ImageItem[] {
   });
 }
 
+export function flipImageById(images: ImageItem[], id: string, axis: FlipAxis): ImageItem[] {
+  if (!id) {
+    return images;
+  }
+
+  return images.map((image) => {
+    if (image.id !== id) {
+      return image;
+    }
+
+    if (axis === 'horizontal') {
+      return {
+        ...image,
+        flipHorizontal: !image.flipHorizontal,
+      };
+    }
+
+    return {
+      ...image,
+      flipVertical: !image.flipVertical,
+    };
+  });
+}
+
+export function setImageOrientationById(images: ImageItem[], id: string, pageOrientation: PageOrientation): ImageItem[] {
+  if (!id) {
+    return images;
+  }
+
+  return images.map((image) => (
+    image.id === id ? { ...image, pageOrientation } : image
+  ));
+}
+
+export function setAllImageOrientations(images: ImageItem[], pageOrientation: PageOrientation): ImageItem[] {
+  return images.map((image) => ({
+    ...image,
+    pageOrientation,
+  }));
+}
+
+export function hasMixedImageOrientations(images: ImageItem[]): boolean {
+  return new Set(images.map((image) => image.pageOrientation)).size > 1;
+}
+
+export function getOrientationFromDimensions(
+  dimensions: ImageDimensions | undefined,
+  fallbackOrientation: PageOrientation = PAGE_ORIENTATIONS.PORTRAIT,
+): PageOrientation {
+  if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
+    return fallbackOrientation;
+  }
+
+  return dimensions.width > dimensions.height ? PAGE_ORIENTATIONS.LANDSCAPE : PAGE_ORIENTATIONS.PORTRAIT;
+}
+
 export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     if (typeof Image === 'undefined') {
@@ -118,6 +197,15 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error('Unable to load image.'));
     image.src = src;
   });
+}
+
+export async function loadImageDimensions(src: string): Promise<ImageDimensions> {
+  const image = await loadImage(src);
+
+  return {
+    width: image.naturalWidth || image.width,
+    height: image.naturalHeight || image.height,
+  };
 }
 
 export function canvasToBlob(canvas: HTMLCanvasElement, quality?: number, mime = 'image/jpeg'): Promise<Blob> {

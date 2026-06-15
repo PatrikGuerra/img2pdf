@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { PAGE_ORIENTATIONS } from '../constants/pdfOptions';
 import type { ImageItem } from '../types/pdf';
 import { formatBytes, getImageSummary } from './imageSummary';
 
@@ -26,6 +27,9 @@ function makeImageItem(name: string, size: number): ImageItem {
   return {
     id: name,
     file: new File([new Uint8Array(size)], name, { type: 'image/png' }),
+    flipHorizontal: false,
+    flipVertical: false,
+    pageOrientation: PAGE_ORIENTATIONS.PORTRAIT,
     previewUrl: `blob:${name}`,
     rotationDegrees: 0,
     selected: false,
