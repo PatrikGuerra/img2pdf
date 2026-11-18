@@ -38,6 +38,8 @@ Live app: https://patrikguerra.github.io/img2pdf/
 
 ## Scripts
 
+Development requires Node.js 22.12 or newer in the 22, 24, or 26+ release lines.
+
 - `npm start` or `npm run dev`: run the Vite development server.
 - `npm run typecheck`: run TypeScript without emitting files.
 - `npm test`: run the Vitest test suite once.

@@ -99,6 +99,31 @@ test('adds supported image files dropped on the landing dropzone', async () => {
   expect(URL.createObjectURL).toHaveBeenCalledWith(file);
 });
 
+test('prepares multiple pasted images', async () => {
+  render(<App />);
+  const files = [new File(['a'], 'a.png', { type: 'image/png' }), new File(['b'], 'b.jpg', { type: 'image/jpeg' })];
+  fireEvent.paste(window, { clipboardData: { files } });
+  expect(await screen.findByRole('button', { name: 'Continue with 2 images' })).toBeInTheDocument();
+});
+
+test('loads image URLs and retains failed URLs for retry', async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    if (String(input).includes('bad')) throw new Error('blocked');
+    return { ok: true, blob: async () => new Blob(['image'], { type: 'image/png' }) } as Response;
+  });
+  try {
+    render(<App />);
+    await user.type(screen.getByLabelText('Image URLs (one per line)'), 'https://example.com/one.png{enter}https://example.com/bad.png');
+    await user.click(screen.getByRole('button', { name: 'Add image URLs' }));
+    expect(await screen.findByText('one.png')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('1 URL(s) could not be loaded');
+    expect(screen.getByLabelText('Image URLs (one per line)')).toHaveValue('https://example.com/bad.png');
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
+
 test('shows selected PNG and JPEG files as ready before continuing', async () => {
   const user = userEvent.setup();
   const png = new File(['png'], 'photo.png', { type: 'image/png' });
