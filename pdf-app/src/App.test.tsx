@@ -217,10 +217,19 @@ test('opens the responsive options bottom sheet from the action bar', async () =
   const optionsPanel = screen.getByLabelText('PDF options');
   expect(optionsPanel).not.toHaveClass('options--visible');
 
-  await user.click(screen.getByRole('button', { name: 'PDF Options' }));
+  const openOptions = screen.getByRole('button', { name: 'PDF Options' });
+  expect(openOptions).toHaveAttribute('aria-expanded', 'false');
+  await user.click(openOptions);
 
   expect(optionsPanel).toHaveClass('options--visible');
-  expect(screen.getByRole('button', { name: 'Close options' })).toBeInTheDocument();
+  expect(openOptions).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('button', { name: 'Close options' })).toHaveFocus();
+  await user.click(screen.getByRole('button', { name: 'US Letter' }));
+  expect(screen.getByRole('button', { name: 'US Letter' })).toHaveFocus();
+  await user.keyboard('{Escape}');
+  expect(optionsPanel).not.toHaveClass('options--visible');
+  expect(openOptions).toHaveAttribute('aria-expanded', 'false');
+  expect(openOptions).toHaveFocus();
 });
 
 test('keeps fixed-page-only options visible but disabled for same-as-image pages', async () => {

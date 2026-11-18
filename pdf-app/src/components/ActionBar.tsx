@@ -4,6 +4,7 @@ interface ActionBarProps {
   imageSummary: string;
   pdfSize?: string;
   canUndo: boolean;
+  optionsOpen: boolean;
   onUndo: () => void;
   onAddPage: () => void;
   onChangeFileName: (fileName: string) => void;
@@ -18,6 +19,7 @@ export default function ActionBar({
   imageSummary,
   pdfSize,
   canUndo,
+  optionsOpen,
   onUndo,
   onAddPage,
   onChangeFileName,
@@ -28,13 +30,13 @@ export default function ActionBar({
   return (
     <div className="actions">
       <div className="left-actions">
-        <button onClick={onShowOptions} className="option-btn button" type="button">
+        <button id="open-pdf-options" aria-controls="pdf-options" aria-expanded={optionsOpen} onClick={onShowOptions} className="option-btn button button--secondary" type="button">
           PDF Options
         </button>
-        <button onClick={onAddPage} className="button" type="button">
+        <button onClick={onAddPage} className="button button--secondary" type="button">
           Add page
         </button>
-        <button onClick={onUndo} disabled={!canUndo} className="button" type="button">Undo page edit</button>
+        <button onClick={onUndo} disabled={!canUndo} className="button button--secondary" type="button">Undo page edit</button>
         <div className="image-summary">{imageSummary}</div>
         {pdfSize ? <div role="status">Last PDF: {pdfSize}</div> : null}
       </div>

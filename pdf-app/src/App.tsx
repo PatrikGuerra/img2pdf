@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import AboutDialog from './components/AboutDialog';
 import ActionBar from './components/ActionBar';
@@ -83,6 +83,11 @@ export default function App() {
   const pickFiles = () => {
     fileInput.current?.click();
   };
+
+  const closeOptions = useCallback(() => {
+    setForceShowOptions(false);
+    document.getElementById('open-pdf-options')?.focus();
+  }, []);
 
   const resetFileInput = () => {
     if (fileInput.current) {
@@ -376,7 +381,7 @@ export default function App() {
           forceShowOptions={forceShowOptions}
           onChangeOptions={updateOptions}
           onChangeOrientation={changeGlobalOrientation}
-          onClose={() => setForceShowOptions(false)}
+          onClose={closeOptions}
           options={options}
         />
       </div>
@@ -386,6 +391,7 @@ export default function App() {
         imageSummary={getImageSummary(images).label}
         pdfSize={pdfSize === undefined ? undefined : formatBytes(pdfSize)}
         canUndo={undoImages !== null}
+        optionsOpen={forceShowOptions}
         onUndo={undo}
         onAddPage={pickFiles}
         onChangeFileName={setPdfFileName}

@@ -63,6 +63,16 @@ export default function OptionsPanel({
     }
   }, [marginInputFocused, options.margin]);
 
+  useEffect(() => {
+    if (!forceShowOptions) return;
+    document.getElementById('close-pdf-options')?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [forceShowOptions, onClose]);
+
   const updateMargin = (margin: number) => {
     onChangeOptions({ margin });
     setMarginInputValue(formatMarginInputValue(margin));
@@ -106,11 +116,11 @@ export default function OptionsPanel({
   };
 
   return (
-    <div className={`options options-panel${forceShowOptions ? ' options--visible' : ''}`} aria-label="PDF options">
+    <div id="pdf-options" className={`options options-panel${forceShowOptions ? ' options--visible' : ''}`} aria-label="PDF options">
       <div className="options-header options-panel-header">
         <span>Options</span>
         {forceShowOptions ? (
-          <button aria-label="Close options" className="plain-button" onClick={onClose} type="button">
+          <button id="close-pdf-options" aria-label="Close options" className="plain-button" onClick={onClose} type="button">
             X
           </button>
         ) : <span />}

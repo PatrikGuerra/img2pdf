@@ -4,6 +4,10 @@ html {
   height: 100%;
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -35,6 +39,7 @@ button {
   flex: 1;
   flex-direction: column;
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   width: 100%;
 }
@@ -85,7 +90,7 @@ button {
   flex: 1;
   flex-direction: column;
   height: 100%;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
   overflow: auto;
   padding: 24px;
@@ -137,6 +142,7 @@ button {
   box-shadow: 0 14px 32px rgba(0,0,0,0.08);
   box-sizing: border-box;
   display: flex;
+  flex-shrink: 0;
   flex-direction: column;
   font-size: 15px;
   gap: 24px;
@@ -378,12 +384,16 @@ button {
 }
 
 .upload-preparation-dialog {
+  max-height: 100%;
+  overflow: auto;
   width: min(100%, 680px);
 }
 
 .content {
   display: flex;
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -391,6 +401,8 @@ button {
   display: flex;
   flex: 1;
   flex-direction: column;
+  min-height: 0;
+  min-width: 0;
   overflow: auto;
   position: relative;
   width: 100%;
@@ -398,11 +410,13 @@ button {
 }
 
 .image-grid {
+  align-content: flex-start;
   display: flex;
   flex: 1;
   flex-wrap: wrap;
   justify-content: center;
-  padding-bottom: 72px;
+  gap: 12px;
+  padding: 18px 12px 72px;
 }
 
 .image-page-shell {
@@ -906,14 +920,36 @@ button {
   color: white;
   border: none;
   border-radius: 20px;
-  background-color: dodgerblue;
+  background-color: #175bb5;
   outline: none;
   cursor: pointer;
 }
 
+.button:hover:not(:disabled) {
+  background-color: #114990;
+}
+
+.button--secondary {
+  background: #edf3fb;
+  border: 1px solid #aabedb;
+  color: #183e70;
+}
+
+.button--secondary:hover:not(:disabled) {
+  background: #dce9f8;
+}
+
 .button:disabled {
-  cursor: wait;
-  opacity: 0.7;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+.page-preview:focus-visible {
+  outline: 3px solid #174ea6;
+  outline-offset: 2px;
 }
 
 .about-button {
@@ -1091,9 +1127,9 @@ button {
   padding: 14px 18px;
 }
 
-@media screen and (max-width: 600px) {
+@media screen and (max-width: 768px) {
   .page-header {
-    font-size: 16px;
+    font-size: 14px;
     padding: 12px 16px;
   }
 
@@ -1113,6 +1149,10 @@ button {
   .url-form textarea {
     font-size: 16px;
   }
+  .resize-field input,
+  .custom-margin-input input {
+    font-size: 16px;
+  }
   .options {
     background: #f7f8fb;
     border-left: none;
@@ -1121,7 +1161,7 @@ button {
     display: none;
     flex: none;
     left: 0;
-    max-height: 88vh;
+    max-height: 88dvh;
     min-width: 0;
     position: fixed;
     right: 0;
@@ -1199,6 +1239,11 @@ button {
   .actions {
     align-items: stretch;
     flex-direction: column;
+    flex-shrink: 0;
+    gap: 8px;
+    max-height: 48dvh;
+    overflow-y: auto;
+    padding: 8px 10px max(8px, env(safe-area-inset-bottom));
   }
 
   .left-actions,
@@ -1210,7 +1255,31 @@ button {
 
   .left-actions,
   .right-actions {
-    justify-content: space-between;
+    display: grid;
+    gap: 6px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .left-actions .button {
+    font-size: 13px;
+    min-height: 44px;
+  }
+
+  .left-actions .image-summary,
+  .left-actions [role='status'] {
+    grid-column: 1 / -1;
+  }
+
+  .right-actions {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .right-actions .pdf-name-field {
+    grid-column: 1 / -1;
+  }
+
+  .right-actions .button {
+    min-height: 44px;
   }
 
   .about-button {
@@ -1230,6 +1299,7 @@ button {
   }
 
   .pdf-name-field input {
+    font-size: 16px;
     min-width: 0;
     width: 100%;
   }
@@ -1242,13 +1312,15 @@ button {
   .selected-page-toolbar {
     align-items: stretch;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
+    padding: 6px 10px;
   }
 
   .selected-page-actions {
+    flex-wrap: wrap;
+    gap: 2px;
     justify-content: flex-start;
-    overflow-x: auto;
-    padding-bottom: 2px;
+    overflow: visible;
   }
 
   .dropzone {
