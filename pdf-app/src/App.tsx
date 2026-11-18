@@ -8,7 +8,7 @@ import ImageGrid from './components/ImageGrid';
 import Landing from './components/Landing';
 import OptionsPanel from './components/OptionsPanel';
 import UploadQueuePanel from './components/UploadQueuePanel';
-import { DEFAULT_PDF_OPTIONS, PAGE_ORIENTATION_LABELS } from './constants/pdfOptions';
+import { PAGE_ORIENTATION_LABELS } from './constants/pdfOptions';
 import { downloadPdf } from './download/downloadPdf';
 import { normalizePdfFileName } from './download/pdfFileName';
 import {
@@ -27,7 +27,9 @@ import {
   setImageOrientationById,
 } from './image/imageFiles';
 import { getImageSummary } from './image/imageSummary';
+import { formatBytes } from './image/imageSummary';
 import { createPdfFromImages } from './pdf/createPdfFromImages';
+import { loadPreferences, savePreferences } from './pdf/preferences';
 import type { FlipAxis, ImageItem, PageOrientation, PdfOptions, PdfProgress } from './types/pdf';
 import type { ImagePreparationProgress, UploadQueueItem } from './types/upload';
 
@@ -38,7 +40,9 @@ export default function App() {
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [preparedImageItems, setPreparedImageItems] = useState<ImageItem[]>([]);
   const [isPreparingUpload, setIsPreparingUpload] = useState(false);
-  const [options, setOptions] = useState<PdfOptions>(DEFAULT_PDF_OPTIONS);
+  const [options, setOptions] = useState<PdfOptions>(loadPreferences);
+  const [undoImages, setUndoImages] = useState<ImageItem[] | null>(null);
+  const [pdfSize, setPdfSize] = useState<number | undefined>();
   const [pdfFileName, setPdfFileName] = useState('file.pdf');
   const [forceShowOptions, setForceShowOptions] = useState(false);
   const [showAboutDialog, setShowAboutDialog] = useState(false);
@@ -49,6 +53,8 @@ export default function App() {
   const [lastError, setLastError] = useState<string | undefined>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
   const imagesRef = useRef(images);
+  const undoImagesRef = useRef<ImageItem[] | null>(null);
+  const undoOrientationRef = useRef<PageOrientation | undefined>();
   const preparedImageItemsRef = useRef(preparedImageItems);
   const uploadQueueRef = useRef(uploadQueue);
   const activeUploadRunsRef = useRef(0);
@@ -57,6 +63,8 @@ export default function App() {
   useEffect(() => {
     imagesRef.current = images;
   }, [images]);
+
+  useEffect(() => { savePreferences(options); }, [options]);
 
   useEffect(() => {
     preparedImageItemsRef.current = preparedImageItems;
@@ -67,7 +75,8 @@ export default function App() {
   }, [uploadQueue]);
 
   useEffect(() => () => {
-    revokeImageItems(imagesRef.current);
+    const allImages = [...imagesRef.current, ...(undoImagesRef.current ?? [])];
+    revokeImageItems([...new Map(allImages.map((image) => [image.previewUrl, image])).values()]);
     revokeImageItems(preparedImageItemsRef.current);
   }, []);
 
@@ -146,7 +155,11 @@ export default function App() {
       return;
     }
 
-    setImages((currentImages) => appendImageItemsWithSelection(currentImages, preparedImageItems));
+    discardUndo();
+    const nextImages = appendImageItemsWithSelection(imagesRef.current, preparedImageItems);
+    imagesRef.current = nextImages;
+    setImages(nextImages);
+    setPdfSize(undefined);
     setPreparedImageItems([]);
     setUploadQueue([]);
     uploadQueueRef.current = [];
@@ -179,7 +192,7 @@ export default function App() {
       ...currentOptions,
       orientation,
     }));
-    setImages((currentImages) => setAllImageOrientations(currentImages, orientation));
+    editImages((currentImages) => setAllImageOrientations(currentImages, orientation), options.orientation);
   };
 
   const changeGlobalOrientation = (orientation: PageOrientation) => {
@@ -200,10 +213,43 @@ export default function App() {
   };
 
   const deleteImage = (id: string) => {
-    setImages((currentImages) => {
-      revokeImageItems(currentImages.filter((image) => image.id === id));
-      return deleteImageAndSelectFallback(currentImages, id);
-    });
+    editImages((currentImages) => deleteImageAndSelectFallback(currentImages, id));
+  };
+
+  const discardUndo = () => {
+    const currentUrls = new Set(imagesRef.current.map((image) => image.previewUrl));
+    revokeImageItems((undoImagesRef.current ?? []).filter((image) => !currentUrls.has(image.previewUrl)));
+    undoImagesRef.current = null;
+    undoOrientationRef.current = undefined;
+    setUndoImages(null);
+  };
+
+  const editImages = (edit: (current: ImageItem[]) => ImageItem[], previousOrientation?: PageOrientation) => {
+    const current = imagesRef.current;
+    const next = edit(current);
+    discardUndo();
+    undoImagesRef.current = current;
+    undoOrientationRef.current = previousOrientation;
+    setUndoImages(current);
+    imagesRef.current = next;
+    setImages(next);
+    setPdfSize(undefined);
+  };
+
+  const undo = () => {
+    if (!undoImagesRef.current) return;
+    const previous = undoImagesRef.current;
+    const previousUrls = new Set(previous.map((image) => image.previewUrl));
+    revokeImageItems(imagesRef.current.filter((image) => !previousUrls.has(image.previewUrl)));
+    imagesRef.current = previous;
+    setImages(previous);
+    if (undoOrientationRef.current) {
+      setOptions((current) => ({ ...current, orientation: undoOrientationRef.current! }));
+    }
+    undoOrientationRef.current = undefined;
+    undoImagesRef.current = null;
+    setUndoImages(null);
+    setPdfSize(undefined);
   };
 
   const requestDeleteImage = (id: string, pageNumber: number) => {
@@ -218,23 +264,23 @@ export default function App() {
   };
 
   const dropImage = (droppedId: string, targetId: string) => {
-    setImages((currentImages) => moveImageBefore(currentImages, droppedId, targetId));
+    if (droppedId !== targetId) editImages((currentImages) => moveImageBefore(currentImages, droppedId, targetId));
   };
 
   const moveImage = (id: string, offset: number) => {
-    setImages((currentImages) => moveImageByOffset(currentImages, id, offset));
+    editImages((currentImages) => moveImageByOffset(currentImages, id, offset));
   };
 
   const rotateImage = (id: string) => {
-    setImages((currentImages) => rotateImageById(currentImages, id));
+    editImages((currentImages) => rotateImageById(currentImages, id));
   };
 
   const flipImage = (id: string, axis: FlipAxis) => {
-    setImages((currentImages) => flipImageById(currentImages, id, axis));
+    editImages((currentImages) => flipImageById(currentImages, id, axis));
   };
 
   const changeImageOrientation = (id: string, pageOrientation: PageOrientation) => {
-    setImages((currentImages) => setImageOrientationById(currentImages, id, pageOrientation));
+    editImages((currentImages) => setImageOrientationById(currentImages, id, pageOrientation));
   };
 
   const generatePdf = async () => {
@@ -245,10 +291,12 @@ export default function App() {
     try {
       setBusy(true);
       setLastError(undefined);
+      setPdfSize(undefined);
       setProgress({ current: 0, total: images.length });
 
       const pdfBytes = await createPdfFromImages(images, options, setProgress);
       downloadPdf(pdfBytes, normalizePdfFileName(pdfFileName));
+      setPdfSize(pdfBytes.byteLength);
     } catch (error) {
       console.error(error);
       setLastError(error instanceof Error ? error.message : 'Unable to generate PDF.');
@@ -260,7 +308,7 @@ export default function App() {
 
   const fileInputElement = (
     <input
-      accept="image/png,image/jpeg,image/heic,image/heif,.heic,.heif"
+      accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif"
       data-testid="file-input"
       multiple
       onChange={(event: ChangeEvent<HTMLInputElement>) => handleFiles(event.target.files)}
@@ -292,6 +340,7 @@ export default function App() {
       <div className="app-shell">
         {pageHeader}
         {lastError ? <div className="status-message" role="alert">{lastError}</div> : null}
+        {undoImages ? <button type="button" onClick={undo}>Undo last page edit</button> : null}
         {fileInputElement}
         <Landing
           isPreparingUpload={isPreparingUpload}
@@ -335,6 +384,9 @@ export default function App() {
         busy={busy}
         fileName={pdfFileName}
         imageSummary={getImageSummary(images).label}
+        pdfSize={pdfSize === undefined ? undefined : formatBytes(pdfSize)}
+        canUndo={undoImages !== null}
+        onUndo={undo}
         onAddPage={pickFiles}
         onChangeFileName={setPdfFileName}
         onGeneratePdf={generatePdf}
@@ -461,7 +513,7 @@ function getFileFeedbackMessage(convertedCount: number, ignoredCount: number): s
   }
 
   if (ignoredCount > 0) {
-    messages.push(`${ignoredCount} file${ignoredCount === 1 ? ' was' : 's were'} not PNG/JPEG/HEIC/HEIF.`);
+    messages.push(`${ignoredCount} file${ignoredCount === 1 ? ' was' : 's were'} not PNG/JPEG/WebP/HEIC/HEIF.`);
   }
 
   return messages.length > 0 ? messages.join(' ') : undefined;

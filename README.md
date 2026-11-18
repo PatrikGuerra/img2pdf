@@ -1,6 +1,6 @@
 # Image to PDF
 
-Turn JPEG, PNG, HEIC, and HEIF images into a PDF in your browser. Arrange pages, adjust their layout, and download the result without uploading local files to a server.
+Turn JPEG, PNG, WebP, HEIC, and HEIF images into a PDF in your browser. Arrange pages, adjust their layout, and download the result without uploading local files to a server.
 
 **[Open Image to PDF](https://patrikguerra.github.io/img2pdf/)**
 
@@ -29,18 +29,22 @@ You can add more files after entering the editor. Each image becomes a PDF page.
 | Control | What it does |
 | --- | --- |
 | Page toolbar | Select, move, rotate, flip, or remove a page. Pages can also be reordered by dragging. |
+| Undo page edit | Restore the most recent page edit or deletion, including the last page. |
 | Orientation | Detects orientation from image dimensions; change it for each page or for all pages. JPEG EXIF orientation is supported. |
 | Page size | Choose A4, US Letter, Oficio, or the image's dimensions. |
 | Margin and placement | Set a margin and choose Fit or Cover. |
 | Background and page numbers | Set a page background color and configure number position, alignment, and placement. |
 | Compression | Optionally compress images as JPEG and choose the quality. |
-| Output | Set the PDF filename and follow generation progress. |
+| Maximum image dimension | Reduce large images before embedding them; zero keeps their original dimensions. |
+| Output | Set the PDF filename, follow generation progress, and see the generated file size. |
+
+PDF options are saved in browser storage for the next visit. Images themselves are not saved.
 
 ## Privacy and limits
 
 - Local files are processed in the browser and are not uploaded by the app. PDF generation and HEIC/HEIF conversion happen on your device.
 - Image URLs are requested directly from their hosts. Those hosts receive the browser's request; loading also depends on the host allowing cross-origin access (CORS).
-- Supported inputs are JPEG, PNG, HEIC, and HEIF. WebP is not supported.
+- Supported inputs are JPEG, PNG, WebP, HEIC, and HEIF. WebP is converted locally to PNG unless JPEG compression is enabled.
 - Large images or many pages can require substantial browser memory and processing time.
 
 ## Run locally

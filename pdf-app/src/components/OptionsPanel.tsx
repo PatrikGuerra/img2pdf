@@ -325,6 +325,13 @@ export default function OptionsPanel({
         </OptionGroup>
 
         <OptionGroup title="Output">
+          <div className="resize-field">
+            <label htmlFor="max-image-dimension">Maximum image dimension (pixels)</label>
+            <input id="max-image-dimension" type="number" min="0" max="10000" step="1"
+              value={options.maxImageDimension ?? 0}
+              onChange={(event) => onChangeOptions({ maxImageDimension: Math.min(10000, Math.max(0, Math.floor(Number(event.currentTarget.value) || 0))) })} />
+            <span>0 keeps the original size. Images are never enlarged.</span>
+          </div>
           <OptionSection columns={2} title="Compression">
             <OptionButton
               active={options.compressImages}

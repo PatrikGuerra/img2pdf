@@ -44,6 +44,7 @@ export async function createPdfFromImages(
         rotationDegrees: manualRotation,
       },
       imageItem.file?.type,
+      resolvedOptions.maxImageDimension,
     );
     const mime = imageData.mime || imageItem.file?.type;
     const jpegOrientation = hasManualTransform ? 1 : readJpegExifOrientationFromArrayBuffer(imageData.arrayBuffer, mime);
@@ -163,13 +164,14 @@ export async function fetchImageData(
   quality?: number,
   transform: ImageTransform = {},
   preferredMime?: string,
+  maxImageDimension = 0,
 ): Promise<FetchedImageData> {
   const manualRotation = normalizeRotation(transform.rotationDegrees);
   const flipHorizontal = Boolean(transform.flipHorizontal);
   const flipVertical = Boolean(transform.flipVertical);
   const hasManualTransform = manualRotation !== 0 || flipHorizontal || flipVertical;
 
-  if (quality === undefined && !hasManualTransform) {
+  if (quality === undefined && !hasManualTransform && !maxImageDimension && preferredMime !== 'image/webp') {
     const response = await fetch(previewUrl);
     return {
       arrayBuffer: await response.arrayBuffer(),
@@ -185,13 +187,14 @@ export async function fetchImageData(
   }
 
   const swapsDimensions = manualRotation === 90 || manualRotation === 270;
-  canvas.width = swapsDimensions ? image.height : image.width;
-  canvas.height = swapsDimensions ? image.width : image.height;
+  const scale = maxImageDimension > 0 ? Math.min(1, maxImageDimension / Math.max(image.width, image.height)) : 1;
+  canvas.width = Math.max(1, Math.round((swapsDimensions ? image.height : image.width) * scale));
+  canvas.height = Math.max(1, Math.round((swapsDimensions ? image.width : image.height) * scale));
   drawImageToCanvas(context, image, canvas, {
     flipHorizontal,
     flipVertical,
     rotationDegrees: manualRotation,
-  });
+  }, scale);
 
   const outputMime = getCanvasMime(preferredMime, quality);
   const blob = outputMime === 'image/png'
@@ -221,7 +224,7 @@ function getCanvasMime(preferredMime: string | undefined, quality: number | unde
     return 'image/jpeg';
   }
 
-  return preferredMime === 'image/png' || preferredMime === 'image/x-png' ? 'image/png' : 'image/jpeg';
+  return preferredMime === 'image/png' || preferredMime === 'image/x-png' || preferredMime === 'image/webp' ? 'image/png' : 'image/jpeg';
 }
 
 function drawImageToCanvas(
@@ -229,17 +232,18 @@ function drawImageToCanvas(
   image: HTMLImageElement,
   canvas: HTMLCanvasElement,
   transform: Required<ImageTransform>,
+  imageScale: number,
 ): void {
   const hasManualTransform = transform.rotationDegrees !== 0 || transform.flipHorizontal || transform.flipVertical;
 
   if (!hasManualTransform) {
-    context.drawImage(image, 0, 0, image.width, image.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
     return;
   }
 
   context.translate(canvas.width / 2, canvas.height / 2);
   context.rotate(transform.rotationDegrees * Math.PI / 180);
-  context.scale(transform.flipHorizontal ? -1 : 1, transform.flipVertical ? -1 : 1);
+  context.scale(imageScale * (transform.flipHorizontal ? -1 : 1), imageScale * (transform.flipVertical ? -1 : 1));
   context.drawImage(image, -image.width / 2, -image.height / 2, image.width, image.height);
 }
 

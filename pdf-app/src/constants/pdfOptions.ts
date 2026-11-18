@@ -55,6 +55,7 @@ export const DEFAULT_PDF_OPTIONS = Object.freeze({
   imageFit: IMAGE_FITS.CONTAIN,
   compressImages: false,
   imageQuality: 80,
+  maxImageDimension: 0,
   pageBackgroundColor: null,
   pageNumbering: {
     enabled: false,

@@ -171,7 +171,7 @@ test('reports ignored file progress without creating object URLs', async () => {
   expect(report.ignoredCount).toBe(1);
   expect(createObjectUrl).not.toHaveBeenCalled();
   expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
-    message: 'Ignored: not PNG/JPEG/HEIC/HEIF.',
+    message: 'Ignored: not PNG/JPEG/WebP/HEIC/HEIF.',
     sourceType: 'UNKNOWN',
     status: 'ignored',
   }));

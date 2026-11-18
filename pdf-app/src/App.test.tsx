@@ -29,6 +29,7 @@ vi.mock('heic2any', () => ({
 }));
 
 beforeEach(() => {
+  localStorage.clear();
   vi.clearAllMocks();
   vi.mocked(createPdfFromImages).mockResolvedValue(new Uint8Array([1, 2, 3]));
   vi.mocked(heic2any).mockResolvedValue(new Blob(['converted'], { type: 'image/jpeg' }));
@@ -42,10 +43,10 @@ test('renders the initial landing view', () => {
   expect(repositoryLink).toHaveAttribute('href', 'https://github.com/PatrikGuerra/img2pdf');
   expect(repositoryLink).toHaveAttribute('target', '_blank');
   expect(repositoryLink).toHaveAttribute('rel', 'noreferrer');
-  expect(screen.getByText(/Convert JPEG, PNG, HEIC, or HEIF images to PDF/i)).toBeInTheDocument();
+  expect(screen.getByText(/Convert JPEG, PNG, WebP, HEIC, or HEIF images to PDF/i)).toBeInTheDocument();
   expect(screen.getByTestId('file-input')).toHaveAttribute(
     'accept',
-    'image/png,image/jpeg,image/heic,image/heif,.heic,.heif',
+    'image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif',
   );
   const dropzone = screen.getByRole('region', { name: /drop images here/i });
 
@@ -261,8 +262,8 @@ test('shows an alert for ignored files and keeps only supported images', async (
     target: { files: [image, text, pdf] },
   });
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('2 files were not PNG/JPEG/HEIC/HEIF.');
-  expect(screen.getAllByText('Ignored: not PNG/JPEG/HEIC/HEIF.')).toHaveLength(2);
+  expect(await screen.findByRole('alert')).toHaveTextContent('2 files were not PNG/JPEG/WebP/HEIC/HEIF.');
+  expect(screen.getAllByText('Ignored: not PNG/JPEG/WebP/HEIC/HEIF.')).toHaveLength(2);
   expect(screen.queryByRole('button', { name: /select page 1/i })).not.toBeInTheDocument();
   await continueUpload(user);
   expect(await screen.findByRole('button', { name: /select page 1/i })).toBeInTheDocument();
@@ -336,10 +337,10 @@ test('combines local conversion and ignored file feedback', async () => {
   });
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    '1 HEIC/HEIF file was converted to JPEG locally. 1 file was not PNG/JPEG/HEIC/HEIF.',
+    '1 HEIC/HEIF file was converted to JPEG locally. 1 file was not PNG/JPEG/WebP/HEIC/HEIF.',
   );
   expect(screen.getByText('Converted to JPEG locally.')).toBeInTheDocument();
-  expect(screen.getByText('Ignored: not PNG/JPEG/HEIC/HEIF.')).toBeInTheDocument();
+  expect(screen.getByText('Ignored: not PNG/JPEG/WebP/HEIC/HEIF.')).toBeInTheDocument();
   await continueUpload(user);
   expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /select page 2/i })).not.toBeInTheDocument();
@@ -427,11 +428,11 @@ test('shows page numbers and automatic page orientations after upload', async ()
   expect(screen.queryByText('Mixed page orientations')).not.toBeInTheDocument();
 });
 
-test('revokes the object URL when a page is deleted', async () => {
+test('restores a deleted last page and releases its URL on unmount', async () => {
   const user = userEvent.setup();
   const file = new File(['image'], 'photo.png', { type: 'image/png' });
 
-  render(<App />);
+  const { unmount } = render(<App />);
 
   await uploadAndContinue(user, file);
   const previewUrl = vi.mocked(URL.createObjectURL).mock.results[0].value;
@@ -443,8 +444,41 @@ test('revokes the object URL when a page is deleted', async () => {
   expect(dialog).toHaveTextContent('Page 1 will be removed from the PDF.');
   await user.click(within(dialog).getByRole('button', { name: 'Remove' }));
 
-  expect(URL.revokeObjectURL).toHaveBeenCalledWith(previewUrl);
+  expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(previewUrl);
   expect(screen.getByRole('button', { name: /select images/i })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Undo last page edit' }));
+  expect(screen.getByRole('button', { name: /select page 1/i })).toBeInTheDocument();
+  unmount();
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith(previewUrl);
+});
+
+test('restores a page edit and displays generated PDF size', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await uploadAndContinue(user, new File(['image'], 'photo.webp', { type: 'image/webp' }));
+  await user.click(screen.getByRole('button', { name: 'Rotate' }));
+  await user.click(screen.getByRole('button', { name: 'Undo page edit' }));
+  await user.click(screen.getByRole('button', { name: 'Generate PDF' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Last PDF: 3 B');
+  expect(vi.mocked(createPdfFromImages).mock.calls[0][0][0].rotationDegrees).toBe(0);
+});
+
+test('persists PDF settings across app remounts', async () => {
+  const user = userEvent.setup();
+  const first = render(<App />);
+  await uploadAndContinue(user, new File(['image'], 'photo.png', { type: 'image/png' }));
+  await user.click(screen.getByRole('button', { name: 'US Letter' }));
+  await user.click(screen.getByRole('button', { name: '5 mm' }));
+  await user.click(screen.getByRole('button', { name: 'Compress Images' }));
+  await user.click(screen.getByRole('button', { name: 'Decrease image quality' }));
+  fireEvent.change(screen.getByLabelText('Maximum image dimension (pixels)'), { target: { value: '1200' } });
+  first.unmount();
+  render(<App />);
+  await uploadAndContinue(user, new File(['image'], 'photo.png', { type: 'image/png' }));
+  expect(screen.getByRole('button', { name: 'US Letter' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '5 mm' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByText('70%')).toBeInTheDocument();
+  expect(screen.getByLabelText('Maximum image dimension (pixels)')).toHaveValue(1200);
 });
 
 test('canceling page removal keeps the page and its object URL', async () => {

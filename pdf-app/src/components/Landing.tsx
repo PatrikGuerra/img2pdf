@@ -51,7 +51,7 @@ export default function Landing({
         const response = await fetch(url.href);
         if (!response.ok) throw new Error();
         const blob = await response.blob();
-        if (!['image/png', 'image/x-png', 'image/jpeg', 'image/heic', 'image/heif'].includes(blob.type.toLowerCase())) throw new Error();
+        if (!['image/png', 'image/x-png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'].includes(blob.type.toLowerCase())) throw new Error();
         const name = decodeURIComponent(url.pathname.split('/').pop() || 'image');
         return new File([blob], name, { type: blob.type });
       } catch {
@@ -113,7 +113,7 @@ export default function Landing({
       >
         <div className="landing-copy">
           <div className="landing-copy-title">
-            Convert JPEG, PNG, HEIC, or HEIF images to PDF without uploading your sensitive data anywhere.
+            Convert JPEG, PNG, WebP, HEIC, or HEIF images to PDF without uploading your sensitive data anywhere.
           </div>
           <div className="landing-copy-note">
             Files are processed on your device. Image URLs are downloaded from their hosts.

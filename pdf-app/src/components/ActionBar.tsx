@@ -2,6 +2,9 @@ interface ActionBarProps {
   busy: boolean;
   fileName: string;
   imageSummary: string;
+  pdfSize?: string;
+  canUndo: boolean;
+  onUndo: () => void;
   onAddPage: () => void;
   onChangeFileName: (fileName: string) => void;
   onGeneratePdf: () => void;
@@ -13,6 +16,9 @@ export default function ActionBar({
   busy,
   fileName,
   imageSummary,
+  pdfSize,
+  canUndo,
+  onUndo,
   onAddPage,
   onChangeFileName,
   onGeneratePdf,
@@ -28,7 +34,9 @@ export default function ActionBar({
         <button onClick={onAddPage} className="button" type="button">
           Add page
         </button>
+        <button onClick={onUndo} disabled={!canUndo} className="button" type="button">Undo page edit</button>
         <div className="image-summary">{imageSummary}</div>
+        {pdfSize ? <div role="status">Last PDF: {pdfSize}</div> : null}
       </div>
       <div className="right-actions">
         <label className="pdf-name-field">

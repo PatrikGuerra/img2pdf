@@ -170,6 +170,20 @@ button {
   font-weight: 600;
 }
 
+.resize-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.resize-field input {
+  box-sizing: border-box;
+  font: inherit;
+  min-height: 44px;
+  padding: 8px;
+  width: 100%;
+}
+
 .url-form textarea {
   border: 1px solid #aaaaba;
   border-radius: 6px;

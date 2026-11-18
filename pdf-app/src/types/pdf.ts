@@ -22,6 +22,7 @@ export interface PdfOptions {
   imageFit: ImageFit;
   compressImages: boolean;
   imageQuality: number;
+  maxImageDimension?: number;
   pageBackgroundColor: string | null;
   pageNumbering: PageNumberingOptions;
 }

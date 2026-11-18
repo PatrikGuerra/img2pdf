@@ -3,7 +3,7 @@ import { getOrientedDimensions, readJpegExifOrientation } from './exifOrientatio
 import type { FlipAxis, ImageDimensions, ImageItem, JpegOrientation, PageOrientation, RotationDegrees } from '../types/pdf';
 import type { ImagePreparationProgress, UploadSourceType } from '../types/upload';
 
-const SUPPORTED_RASTER_IMAGE_TYPES = new Set(['image/png', 'image/x-png', 'image/jpeg']);
+const SUPPORTED_RASTER_IMAGE_TYPES = new Set(['image/png', 'image/x-png', 'image/jpeg', 'image/webp']);
 const HEIC_IMAGE_TYPES = new Set(['image/heic', 'image/heif']);
 const HEIC_EXTENSIONS = new Set(['heic', 'heif']);
 const HEIC_CONVERSION_QUALITY = 0.95;
@@ -48,6 +48,9 @@ export function getImageSourceType(file: File | undefined | null): UploadSourceT
   }
 
   const type = file.type.toLowerCase();
+  if (type === 'image/webp') {
+    return 'WEBP';
+  }
   if (type === 'image/png' || type === 'image/x-png') {
     return 'PNG';
   }
@@ -98,7 +101,7 @@ export async function createImageItemsReport(
       onProgress?.({
         file: originalFile,
         index,
-        message: 'Ignored: not PNG/JPEG/HEIC/HEIF.',
+        message: 'Ignored: not PNG/JPEG/WebP/HEIC/HEIF.',
         sourceType,
         status: 'ignored',
       });

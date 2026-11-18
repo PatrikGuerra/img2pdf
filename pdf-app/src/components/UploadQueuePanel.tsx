@@ -13,7 +13,7 @@ const STATUS_LABELS: Record<UploadQueueStatus, string> = {
   queued: 'Preparing files...',
   converting: 'Converting HEIC/HEIF to JPEG locally...',
   ready: 'Ready',
-  ignored: 'Ignored: not PNG/JPEG/HEIC/HEIF.',
+  ignored: 'Ignored: not PNG/JPEG/WebP/HEIC/HEIF.',
   error: 'Conversion failed. Try exporting this image as JPEG.',
 };
 

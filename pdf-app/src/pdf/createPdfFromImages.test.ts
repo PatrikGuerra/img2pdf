@@ -502,6 +502,27 @@ describe('fetchImageData', () => {
     restore();
   });
 
+  test('converts WebP to PNG and resizes without enlarging', async () => {
+    const { canvas, drawImage, restore } = mockCanvasElement();
+    const result = await fetchImageData('blob:image', undefined, {}, 'image/webp', 160);
+    expect(result.mime).toBe('image/png');
+    expect([canvas.width, canvas.height]).toEqual([160, 120]);
+    expect(drawImage).toHaveBeenCalledWith({ height: 240, width: 320 }, 0, 0, 160, 120);
+    expect(imageMock.canvasToBlob).toHaveBeenCalledWith(canvas, undefined, 'image/png');
+    await fetchImageData('blob:image', undefined, {}, 'image/webp', 1000);
+    expect([canvas.width, canvas.height]).toEqual([320, 240]);
+    restore();
+  });
+
+  test('resizes rotated images while preserving the rotation', async () => {
+    const { canvas, scale, rotate, restore } = mockCanvasElement();
+    await fetchImageData('blob:image', undefined, { rotationDegrees: 90 }, 'image/png', 160);
+    expect([canvas.width, canvas.height]).toEqual([120, 160]);
+    expect(scale).toHaveBeenCalledWith(0.5, 0.5);
+    expect(rotate).toHaveBeenCalledWith(Math.PI / 2);
+    restore();
+  });
+
   test.each([
     [90, 240, 320, [120, 160], Math.PI / 2],
     [180, 320, 240, [160, 120], Math.PI],

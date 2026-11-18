@@ -1,4 +1,4 @@
-export type UploadSourceType = 'PNG' | 'JPEG' | 'HEIC' | 'HEIF' | 'UNKNOWN';
+export type UploadSourceType = 'PNG' | 'JPEG' | 'WEBP' | 'HEIC' | 'HEIF' | 'UNKNOWN';
 export type UploadQueueStatus = 'queued' | 'converting' | 'ready' | 'ignored' | 'error';
 
 export interface UploadQueueItem {

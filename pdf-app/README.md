@@ -1,6 +1,6 @@
 # Img2PDF App
 
-React + TypeScript + Vite app for converting local JPEG, PNG, HEIC, and HEIF files to PDF in the browser.
+React + TypeScript + Vite app for converting local JPEG, PNG, WebP, HEIC, and HEIF files to PDF in the browser.
 
 The app is client-only: selected files are processed on the user's device and are not uploaded to a server.
 
@@ -57,7 +57,7 @@ The repository includes a GitHub Actions workflow at `.github/workflows/deploy-p
 
 JPEG and PNG are embedded directly.
 
-HEIC and HEIF photos are converted locally in the browser to JPEG before PDF generation. WebP is intentionally not enabled; adding it would require canvas conversion and a separate decision about how to handle transparency.
+HEIC and HEIF photos are converted locally to JPEG. WebP images are converted locally to PNG, or JPEG when compression is enabled. PDF settings persist in browser storage; images do not.
 
 ## Credits
 
